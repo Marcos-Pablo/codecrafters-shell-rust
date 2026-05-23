@@ -5,16 +5,30 @@ use std::process::exit;
 fn main() {
     loop {
         print!("$ ");
-        io::stdout().flush().unwrap();
+        io::stdout().flush().expect("Error writing to stdout!");
 
-        let mut command = String::new();
+        let mut input = String::new();
         std::io::stdin()
-            .read_line(&mut command)
+            .read_line(&mut input)
             .expect("Error reading input");
 
-        match command.trim() {
+        let mut input_iter = input.trim().split_whitespace();
+        let command = match input_iter.next() {
+            Some(val) => val,
+            None => continue,
+        };
+
+        let args: Vec<&str> = input_iter.collect();
+
+        match command {
             "exit" => exit(0),
-            _ => println!("{}: command not found", command.trim()),
+            "echo" => echo(command, args),
+            _ => println!("{}: command not found", input.trim()),
         }
     }
+}
+
+fn echo(_command: &str, args: Vec<&str>) {
+    let output = args.join(" ");
+    println!("{output}");
 }
