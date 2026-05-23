@@ -1,6 +1,5 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
-use std::process::exit;
 
 fn main() {
     loop {
@@ -21,14 +20,28 @@ fn main() {
         let args: Vec<&str> = input_iter.collect();
 
         match command {
-            "exit" => exit(0),
-            "echo" => echo(command, args),
+            "exit" => std::process::exit(0),
+            "echo" => echo(args),
+            "type" => type_cmd(args),
             _ => println!("{}: command not found", input.trim()),
         }
     }
 }
 
-fn echo(_command: &str, args: Vec<&str>) {
+fn is_built_in(command: &str) -> bool {
+    matches!(command, "echo" | "exit" | "type")
+}
+
+fn echo(args: Vec<&str>) {
     let output = args.join(" ");
     println!("{output}");
+}
+
+fn type_cmd(args: Vec<&str>) {
+    for arg in args {
+        match is_built_in(arg) {
+            true => println!("{arg} is a shell builtin"),
+            false => println!("{arg}: not found"),
+        }
+    }
 }
