@@ -5,12 +5,10 @@ fn main() {
     print!("$ ");
     io::stdout().flush().unwrap();
 
-    let mut cmd = String::new();
+    let mut command = String::new();
     std::io::stdin()
-        .read_line(&mut cmd)
+        .read_line(&mut command)
         .expect("Error reading input");
 
-    let cmd = cmd.trim();
-
-    println!("{cmd}: command not found");
+    println!("{}: command not found", command.trim());
 }
