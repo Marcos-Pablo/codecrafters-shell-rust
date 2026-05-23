@@ -1,5 +1,6 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
+use std::process::exit;
 
 fn main() {
     loop {
@@ -11,6 +12,9 @@ fn main() {
             .read_line(&mut command)
             .expect("Error reading input");
 
-        println!("{}: command not found", command.trim());
+        match command.trim() {
+            "exit" => exit(0),
+            _ => println!("{}: command not found", command.trim()),
+        }
     }
 }
