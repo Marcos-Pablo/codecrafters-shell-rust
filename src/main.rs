@@ -50,7 +50,7 @@ fn type_cmd(args: Vec<&str>) {
         match arg {
             arg if is_built_in(arg) => println!("{arg} is a shell builtin"),
             arg if let Some(exec_path) = command_path(arg) => {
-                println!("{arg}: is {}", exec_path.display())
+                println!("{arg} is {}", exec_path.display())
             }
             _ => println!("{arg}: not found"),
         }
