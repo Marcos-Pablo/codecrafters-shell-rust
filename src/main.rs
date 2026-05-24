@@ -1,12 +1,16 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
+use std::path::PathBuf;
+use which::which;
 
 fn main() {
+    let mut input = String::new();
+
     loop {
+        input.clear();
         print!("$ ");
         io::stdout().flush().expect("Error writing to stdout!");
 
-        let mut input = String::new();
         std::io::stdin()
             .read_line(&mut input)
             .expect("Error reading input");
@@ -21,9 +25,9 @@ fn main() {
 
         match command {
             "exit" => std::process::exit(0),
-            "echo" => echo(args),
+            "echo" => echo_cmd(args),
             "type" => type_cmd(args),
-            _ => println!("{}: command not found", input.trim()),
+            _ => println!("{command}: command not found"),
         }
     }
 }
@@ -32,16 +36,24 @@ fn is_built_in(command: &str) -> bool {
     matches!(command, "echo" | "exit" | "type")
 }
 
-fn echo(args: Vec<&str>) {
+fn command_path(arg: &str) -> Option<PathBuf> {
+    which(arg).ok()
+}
+
+fn echo_cmd(args: Vec<&str>) {
     let output = args.join(" ");
-    println!("{output}");
+    println!("{output}\n");
 }
 
 fn type_cmd(args: Vec<&str>) {
     for arg in args {
-        match is_built_in(arg) {
-            true => println!("{arg} is a shell builtin"),
-            false => println!("{arg}: not found"),
+        match arg {
+            arg if is_built_in(arg) => println!("{arg} is a shell builtin"),
+            arg if let Some(exec_path) = command_path(arg) => {
+                println!("{arg}: is {}", exec_path.display())
+            }
+            _ => println!("{arg}: not found"),
         }
     }
+    println!();
 }
