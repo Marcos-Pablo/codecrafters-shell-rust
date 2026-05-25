@@ -1,4 +1,5 @@
 use std::io::{self, Write};
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
 use which::which;
@@ -41,7 +42,10 @@ fn command_path(cmd: &str) -> Option<PathBuf> {
 }
 
 fn execute_command_path(exec_path: PathBuf, args: &[&str]) {
-    let status = Command::new(exec_path).args(args).status();
+    let status = Command::new(&exec_path)
+        .arg0(&args[0])
+        .args(&args[1..])
+        .status();
     match status {
         Ok(_) => (),
         Err(e) => eprintln!("Failed to execute command: {e}"),
