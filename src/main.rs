@@ -42,7 +42,7 @@ fn command_path(arg: &str) -> Option<PathBuf> {
 
 fn echo_cmd(args: Vec<&str>) {
     let output = args.join(" ");
-    println!("{output}\n");
+    println!("{output}");
 }
 
 fn type_cmd(args: Vec<&str>) {
