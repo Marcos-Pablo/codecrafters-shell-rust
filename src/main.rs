@@ -15,20 +15,17 @@ fn main() {
             .read_line(&mut input)
             .expect("Error reading input");
 
-        let mut input_iter = input.trim().split_whitespace();
-        let command = match input_iter.next() {
-            Some(val) => val,
-            None => continue,
+        let args: Vec<&str> = input.trim().split_whitespace().collect();
+        let Some(&command) = args.get(0) else {
+            continue;
         };
-
-        let args: Vec<&str> = input_iter.collect();
 
         match command {
             "exit" => std::process::exit(0),
-            "echo" => echo_cmd(args),
-            "type" => type_cmd(args),
+            "echo" => echo_cmd(&args),
+            "type" => type_cmd(&args),
             arg if let Some(exec_path) = command_path(arg) => {
-                execute_command_path(exec_path, args);
+                execute_command_path(exec_path, &args);
             }
             _ => println!("{command}: command not found"),
         }
@@ -43,7 +40,7 @@ fn command_path(arg: &str) -> Option<PathBuf> {
     which(arg).ok()
 }
 
-fn execute_command_path(exec_path: PathBuf, args: Vec<&str>) {
+fn execute_command_path(exec_path: PathBuf, args: &[&str]) {
     let status = Command::new(exec_path).args(args).status();
     match status {
         Ok(_) => (),
@@ -51,13 +48,13 @@ fn execute_command_path(exec_path: PathBuf, args: Vec<&str>) {
     }
 }
 
-fn echo_cmd(args: Vec<&str>) {
-    let output = args.join(" ");
+fn echo_cmd(args: &[&str]) {
+    let output = args[1..].join(" ");
     println!("{output}");
 }
 
-fn type_cmd(args: Vec<&str>) {
-    for arg in args {
+fn type_cmd(args: &[&str]) {
+    for &arg in &args[1..] {
         match arg {
             arg if is_built_in(arg) => println!("{arg} is a shell builtin"),
             arg if let Some(exec_path) = command_path(arg) => {
