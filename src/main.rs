@@ -41,7 +41,7 @@ fn command_path(cmd: &str) -> Option<PathBuf> {
 }
 
 fn execute_command_path(exec_path: PathBuf, args: &[&str]) {
-    let status = Command::new(exec_path).args(&args[1..]).status();
+    let status = Command::new(exec_path).args(args).status();
     match status {
         Ok(_) => (),
         Err(e) => eprintln!("Failed to execute command: {e}"),
