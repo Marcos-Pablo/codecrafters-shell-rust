@@ -55,5 +55,4 @@ fn type_cmd(args: Vec<&str>) {
             _ => println!("{arg}: not found"),
         }
     }
-    println!();
 }
