@@ -41,6 +41,8 @@ fn command_path(cmd: &str) -> Option<PathBuf> {
 }
 
 fn execute_command_path(exec_path: PathBuf, args: &[&str]) {
+    dbg!(&exec_path);
+    dbg!(&args[1..]);
     let status = Command::new(exec_path).args(&args[1..]).status();
     match status {
         Ok(_) => (),
