@@ -24,7 +24,7 @@ fn main() {
             "exit" => std::process::exit(0),
             "echo" => echo_cmd(&args),
             "type" => type_cmd(&args),
-            arg if let Some(exec_path) = command_path(arg) => {
+            cmd if let Some(exec_path) = command_path(cmd) => {
                 execute_command_path(exec_path, &args);
             }
             _ => println!("{command}: command not found"),
@@ -36,12 +36,12 @@ fn is_built_in(command: &str) -> bool {
     matches!(command, "echo" | "exit" | "type")
 }
 
-fn command_path(arg: &str) -> Option<PathBuf> {
-    which(arg).ok()
+fn command_path(cmd: &str) -> Option<PathBuf> {
+    which(cmd).ok()
 }
 
 fn execute_command_path(exec_path: PathBuf, args: &[&str]) {
-    let status = Command::new(exec_path).args(args).status();
+    let status = Command::new(exec_path).args(&args[1..]).status();
     match status {
         Ok(_) => (),
         Err(e) => eprintln!("Failed to execute command: {e}"),
