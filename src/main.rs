@@ -1,6 +1,6 @@
-#[allow(unused_imports)]
 use std::io::{self, Write};
 use std::path::PathBuf;
+use std::process::Command;
 use which::which;
 
 fn main() {
@@ -27,6 +27,9 @@ fn main() {
             "exit" => std::process::exit(0),
             "echo" => echo_cmd(args),
             "type" => type_cmd(args),
+            arg if let Some(exec_path) = command_path(arg) => {
+                execute_command_path(exec_path, args);
+            }
             _ => println!("{command}: command not found"),
         }
     }
@@ -38,6 +41,14 @@ fn is_built_in(command: &str) -> bool {
 
 fn command_path(arg: &str) -> Option<PathBuf> {
     which(arg).ok()
+}
+
+fn execute_command_path(exec_path: PathBuf, args: Vec<&str>) {
+    let status = Command::new(exec_path).args(args).status();
+    match status {
+        Ok(_) => (),
+        Err(e) => eprintln!("Failed to execute command: {e}"),
+    }
 }
 
 fn echo_cmd(args: Vec<&str>) {
