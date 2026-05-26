@@ -1,6 +1,7 @@
+use std::fs;
 use std::io::{self, Write};
 use std::os::unix::process::CommandExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 use which::which;
 
@@ -71,6 +72,9 @@ impl Shell {
             true => self.curr_dir = dest,
             false => println!("cd: {path}: No such file or directory"),
         }
+
+        self.curr_dir = fs::canonicalize(&self.curr_dir)
+            .expect("Error canonicalizing current working directory");
     }
 }
 
