@@ -66,7 +66,17 @@ impl Shell {
         }
 
         let path = args[1];
-        let dest = self.curr_dir.join(path);
+        let dest: PathBuf;
+        if path.starts_with('~') {
+            let Some(home_path) = home::home_dir() else {
+                eprintln!("Error getting $home dir");
+                return;
+            };
+
+            dest = home_path.join(&path[1..]);
+        } else {
+            dest = self.curr_dir.join(path);
+        }
 
         match dest.is_dir() {
             true => self.curr_dir = dest,
