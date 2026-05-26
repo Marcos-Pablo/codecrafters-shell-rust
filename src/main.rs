@@ -25,6 +25,7 @@ fn main() {
             "exit" => std::process::exit(0),
             "echo" => echo_cmd(&args),
             "type" => type_cmd(&args),
+            "pwd" => pwd_cmd(),
             cmd if let Some(exec_path) = command_path(cmd) => {
                 execute_command_path(exec_path, &args);
             }
@@ -34,7 +35,7 @@ fn main() {
 }
 
 fn is_built_in(command: &str) -> bool {
-    matches!(command, "echo" | "exit" | "type")
+    matches!(command, "echo" | "exit" | "type" | "pwd")
 }
 
 fn command_path(cmd: &str) -> Option<PathBuf> {
@@ -66,5 +67,13 @@ fn type_cmd(args: &[&str]) {
             }
             _ => println!("{arg}: not found"),
         }
+    }
+}
+
+fn pwd_cmd() {
+    let dir = std::env::current_dir();
+    match dir {
+        Ok(path_buf) => println!("{}", path_buf.display()),
+        Err(e) => eprintln!("Error getting current directory: {e}"),
     }
 }
