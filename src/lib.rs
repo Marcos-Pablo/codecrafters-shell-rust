@@ -49,16 +49,27 @@ impl Shell {
     }
 
     fn cd_cmd(&mut self, args: &[&str]) {
-        if args.len() != 2 {
+        if args.len() > 2 {
             eprintln!("usage: cd <path>");
             return;
         }
 
-        let absolute_path = args[1];
-        let dest = Path::new(absolute_path);
+        if args.len() == 1 {
+            let Some(home_path) = home::home_dir() else {
+                eprintln!("Error getting $home dir");
+                return;
+            };
+
+            self.curr_dir = home_path;
+            return;
+        }
+
+        let path = args[1];
+        let dest = self.curr_dir.join(path);
+
         match dest.is_dir() {
-            true => self.curr_dir = dest.to_path_buf(),
-            false => println!("cd: {absolute_path}: No such file or directory"),
+            true => self.curr_dir = dest,
+            false => println!("cd: {path}: No such file or directory"),
         }
     }
 }
