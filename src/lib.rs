@@ -26,7 +26,9 @@ impl Shell {
                 .read_line(&mut input)
                 .expect("Error reading input");
 
-            let args: Vec<&str> = input.trim().split_whitespace().collect();
+            let processed_input = process_input(&input);
+
+            let args: Vec<&str> = processed_input.trim().split_whitespace().collect();
             let Some(&command) = args.get(0) else {
                 continue;
             };
@@ -55,37 +57,64 @@ impl Shell {
             return;
         }
 
-        if args.len() == 1 {
+        let &path = args.get(1).unwrap_or(&"~");
+
+        let dest = if let Some(rest) = path.strip_prefix("~") {
             let Some(home_path) = home::home_dir() else {
-                eprintln!("Error getting $home dir");
+                eprintln!("cd: cannot determine home directory");
                 return;
             };
-
-            self.curr_dir = home_path;
-            return;
-        }
-
-        let path = args[1];
-        let dest: PathBuf;
-        if path.starts_with('~') {
-            let Some(home_path) = home::home_dir() else {
-                eprintln!("Error getting $home dir");
-                return;
-            };
-
-            dest = home_path.join(&path[1..]);
+            home_path.join(rest.trim_start_matches('/'))
         } else {
-            dest = self.curr_dir.join(path);
-        }
+            self.curr_dir.join(path)
+        };
 
-        match dest.is_dir() {
-            true => self.curr_dir = dest,
-            false => println!("cd: {path}: No such file or directory"),
+        match fs::canonicalize(&dest) {
+            Ok(p) if p.is_dir() => self.curr_dir = p,
+            _ => eprintln!("cd: {}: No such file or directory", dest.display()),
         }
-
-        self.curr_dir = fs::canonicalize(&self.curr_dir)
-            .expect("Error canonicalizing current working directory");
     }
+}
+
+fn process_input(input: &str) -> String {
+    let mut inside_quotes = false;
+    let mut result: Vec<char> = Vec::new();
+
+    for c in input.chars() {
+        if !inside_quotes {
+            if c == '\'' {
+                inside_quotes = true;
+                continue;
+            }
+
+            if c.is_whitespace() {
+                if result.len() == 0 {
+                    continue;
+                }
+
+                let last_idx = result.len() - 1;
+                let is_last_char_whitespace = match result.get(last_idx) {
+                    Some(last) if last.is_whitespace() => true,
+                    _ => false,
+                };
+
+                if is_last_char_whitespace {
+                    continue;
+                }
+            }
+
+            result.push(c);
+        } else {
+            if c == '\'' {
+                inside_quotes = false;
+                continue;
+            }
+
+            result.push(c);
+        }
+    }
+
+    result.iter().collect()
 }
 
 fn is_built_in(command: &str) -> bool {
