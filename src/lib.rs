@@ -28,14 +28,14 @@ impl Shell {
 
             let processed_input = process_input(&input);
 
-            let args: Vec<&str> = processed_input.trim().split_whitespace().collect();
+            let args: Vec<&str> = processed_input.split_whitespace().collect();
             let Some(&command) = args.get(0) else {
                 continue;
             };
 
             match command {
                 "exit" => std::process::exit(0),
-                "echo" => echo_cmd(&args),
+                "echo" => echo_cmd(&processed_input),
                 "type" => type_cmd(&args),
                 "pwd" => self.pwd_cmd(),
                 "cd" => self.cd_cmd(&args),
@@ -80,7 +80,7 @@ fn process_input(input: &str) -> String {
     let mut inside_quotes = false;
     let mut result: Vec<char> = Vec::new();
 
-    for c in input.chars() {
+    for c in input.trim().chars() {
         if !inside_quotes {
             if c == '\'' {
                 inside_quotes = true;
@@ -137,9 +137,10 @@ fn execute_command_path(exec_path: PathBuf, args: &[&str]) {
     }
 }
 
-fn echo_cmd(args: &[&str]) {
-    let output = args[1..].join(" ");
-    println!("{output}");
+fn echo_cmd(input: &str) {
+    let (_, args) = input.split_once(' ').unwrap_or_default();
+    let args = args.trim();
+    println!("{args}");
 }
 
 fn type_cmd(args: &[&str]) {
