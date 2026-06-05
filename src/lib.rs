@@ -26,16 +26,15 @@ impl Shell {
                 .read_line(&mut input)
                 .expect("Error reading input");
 
-            let processed_input = process_input(&input);
+            let args = tokenize(&input);
 
-            let args: Vec<&str> = processed_input.split_whitespace().collect();
-            let Some(&command) = args.get(0) else {
+            let Some(command) = args.get(0) else {
                 continue;
             };
 
-            match command {
+            match command.as_str() {
                 "exit" => std::process::exit(0),
-                "echo" => echo_cmd(&processed_input),
+                "echo" => echo_cmd(&args),
                 "type" => type_cmd(&args),
                 "pwd" => self.pwd_cmd(),
                 "cd" => self.cd_cmd(&args),
@@ -51,13 +50,16 @@ impl Shell {
         println!("{}", self.curr_dir.display());
     }
 
-    fn cd_cmd(&mut self, args: &[&str]) {
+    fn cd_cmd(&mut self, args: &[String]) {
         if args.len() > 2 {
             eprintln!("usage: cd <path>");
             return;
         }
 
-        let &path = args.get(1).unwrap_or(&"~");
+        let path = match args.get(1) {
+            Some(p) => p.as_str(),
+            None => "~",
+        };
 
         let dest = if let Some(rest) = path.strip_prefix("~") {
             let Some(home_path) = home::home_dir() else {
@@ -76,45 +78,38 @@ impl Shell {
     }
 }
 
-fn process_input(input: &str) -> String {
+fn tokenize(input: &str) -> Vec<String> {
     let mut inside_quotes = false;
-    let mut result: Vec<char> = Vec::new();
+    let mut tokens = Vec::new();
+    let mut current = String::new();
 
     for c in input.trim().chars() {
-        if !inside_quotes {
-            if c == '\'' {
-                inside_quotes = true;
-                continue;
-            }
-
-            if c.is_whitespace() {
-                if result.len() == 0 {
-                    continue;
-                }
-
-                let last_idx = result.len() - 1;
-                let is_last_char_whitespace = match result.get(last_idx) {
-                    Some(last) if last.is_whitespace() => true,
-                    _ => false,
-                };
-
-                if is_last_char_whitespace {
-                    continue;
-                }
-            }
-
-            result.push(c);
-        } else {
-            if c == '\'' {
-                inside_quotes = false;
-                continue;
-            }
-
-            result.push(c);
+        if c == '\'' && !inside_quotes {
+            inside_quotes = true;
+            continue;
         }
+
+        if c == '\'' && inside_quotes {
+            inside_quotes = false;
+            continue;
+        }
+
+        if c.is_whitespace() && !inside_quotes {
+            if !current.is_empty() {
+                tokens.push(current.clone());
+                current.clear();
+            }
+            continue;
+        }
+
+        current.push(c);
     }
 
-    result.iter().collect()
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+
+    tokens
 }
 
 fn is_built_in(command: &str) -> bool {
@@ -125,7 +120,7 @@ fn command_path(cmd: &str) -> Option<PathBuf> {
     which(cmd).ok()
 }
 
-fn execute_command_path(exec_path: PathBuf, args: &[&str]) {
+fn execute_command_path(exec_path: PathBuf, args: &[String]) {
     let status = Command::new(&exec_path)
         .arg0(&args[0])
         .args(&args[1..])
@@ -137,15 +132,15 @@ fn execute_command_path(exec_path: PathBuf, args: &[&str]) {
     }
 }
 
-fn echo_cmd(input: &str) {
-    let (_, args) = input.split_once(' ').unwrap_or_default();
-    let args = args.trim();
-    println!("{args}");
+fn echo_cmd(args: &[String]) {
+    let content = args[1..].join(" ");
+
+    println!("{content}");
 }
 
-fn type_cmd(args: &[&str]) {
-    for &arg in &args[1..] {
-        match arg {
+fn type_cmd(args: &[String]) {
+    for arg in &args[1..] {
+        match arg.as_str() {
             arg if is_built_in(arg) => println!("{arg} is a shell builtin"),
             arg if let Some(exec_path) = command_path(arg) => {
                 println!("{arg} is {}", exec_path.display())
