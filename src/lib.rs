@@ -30,12 +30,9 @@ impl Shell {
                 .read_line(&mut input)
                 .expect("Error reading input");
 
-            let Ok((remaining, args)) = parser::tokenize(&input.trim()) else {
+            let Ok((_, args)) = parser::tokenize(&input.trim()) else {
                 continue;
             };
-
-            dbg!(&remaining);
-            dbg!(&args);
 
             let Some(first_token) = args.get(0) else {
                 continue;
