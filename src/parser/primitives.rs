@@ -81,10 +81,6 @@ pub(crate) fn match_until_char<'a>(ch: char) -> impl Parser<'a, String> {
             matched.push(next);
         }
 
-        if matched.is_empty() {
-            return Err(input);
-        }
-
         let next_index = matched.len();
         Ok((&input[next_index..], matched))
     }
