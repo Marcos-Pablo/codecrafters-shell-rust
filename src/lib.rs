@@ -5,6 +5,10 @@ use std::path::PathBuf;
 use std::process::Command;
 use which::which;
 
+use crate::parser::{Token, TokenPart};
+
+mod parser;
+
 pub struct Shell {
     curr_dir: PathBuf,
 }
@@ -26,10 +30,22 @@ impl Shell {
                 .read_line(&mut input)
                 .expect("Error reading input");
 
-            let args = tokenize(&input);
-
-            let Some(command) = args.get(0) else {
+            let Ok((_, args)) = parser::tokenize(&input.trim()) else {
                 continue;
+            };
+            dbg!(&args);
+
+            let Some(first_token) = args.get(0) else {
+                continue;
+            };
+
+            let Some(first_part) = first_token.parts.get(0) else {
+                continue;
+            };
+
+            let command = match first_part {
+                TokenPart::Unquoted(part) => part,
+                _ => continue,
             };
 
             match command.as_str() {
@@ -39,7 +55,7 @@ impl Shell {
                 "pwd" => self.pwd_cmd(),
                 "cd" => self.cd_cmd(&args),
                 cmd if let Some(exec_path) = command_path(cmd) => {
-                    execute_command_path(exec_path, &args);
+                    execute_command(exec_path, &args);
                 }
                 _ => println!("{command}: command not found"),
             }
@@ -50,16 +66,17 @@ impl Shell {
         println!("{}", self.curr_dir.display());
     }
 
-    fn cd_cmd(&mut self, args: &[String]) {
+    fn cd_cmd(&mut self, args: &[Token]) {
         if args.len() > 2 {
             eprintln!("usage: cd <path>");
             return;
         }
 
-        let path = match args.get(1) {
-            Some(p) => p.as_str(),
-            None => "~",
-        };
+        let path = args
+            .get(1)
+            .filter(|t| !t.is_empty())
+            .map(|t| t.to_string())
+            .unwrap_or("~".to_string());
 
         let dest = if let Some(rest) = path.strip_prefix("~") {
             let Some(home_path) = home::home_dir() else {
@@ -78,40 +95,6 @@ impl Shell {
     }
 }
 
-fn tokenize(input: &str) -> Vec<String> {
-    let mut inside_quotes = false;
-    let mut tokens = Vec::new();
-    let mut current = String::new();
-
-    for c in input.trim().chars() {
-        if c == '\'' && !inside_quotes {
-            inside_quotes = true;
-            continue;
-        }
-
-        if c == '\'' && inside_quotes {
-            inside_quotes = false;
-            continue;
-        }
-
-        if c.is_whitespace() && !inside_quotes {
-            if !current.is_empty() {
-                tokens.push(current.clone());
-                current.clear();
-            }
-            continue;
-        }
-
-        current.push(c);
-    }
-
-    if !current.is_empty() {
-        tokens.push(current);
-    }
-
-    tokens
-}
-
 fn is_built_in(command: &str) -> bool {
     matches!(command, "echo" | "exit" | "type" | "pwd")
 }
@@ -120,11 +103,11 @@ fn command_path(cmd: &str) -> Option<PathBuf> {
     which(cmd).ok()
 }
 
-fn execute_command_path(exec_path: PathBuf, args: &[String]) {
-    let status = Command::new(&exec_path)
-        .arg0(&args[0])
-        .args(&args[1..])
-        .status();
+fn execute_command(exec_path: PathBuf, args: &[Token]) {
+    let arg0 = args[0].to_string();
+    let args: Vec<String> = args.iter().skip(1).map(|token| token.to_string()).collect();
+
+    let status = Command::new(&exec_path).arg0(&arg0).args(&args).status();
 
     match status {
         Ok(_) => (),
@@ -132,20 +115,22 @@ fn execute_command_path(exec_path: PathBuf, args: &[String]) {
     }
 }
 
-fn echo_cmd(args: &[String]) {
-    let content = args[1..].join(" ");
-
-    println!("{content}");
+fn echo_cmd(args: &[Token]) {
+    args[1..]
+        .iter()
+        .for_each(|token| print!("{}", token.to_string()));
+    println!();
 }
 
-fn type_cmd(args: &[String]) {
+fn type_cmd(args: &[Token]) {
     for arg in &args[1..] {
-        match arg.as_str() {
+        let token = arg.to_string();
+        match token.as_str() {
             arg if is_built_in(arg) => println!("{arg} is a shell builtin"),
             arg if let Some(exec_path) = command_path(arg) => {
                 println!("{arg} is {}", exec_path.display())
             }
-            _ => println!("{arg}: not found"),
+            _ => println!("{token}: not found"),
         }
     }
 }

@@ -1,0 +1,53 @@
+use crate::parser::primitives::{
+    left, map, match_double_quote, match_single_quote, match_until, match_until_char, one_or_more,
+    whitespace, zero_or_more,
+};
+use crate::parser::{Token, TokenPart};
+
+use super::core::Parser;
+use super::primitives::right;
+
+pub fn tokens<'a>() -> impl Parser<'a, Vec<Token>> {
+    one_or_more(token())
+}
+
+fn token<'a>() -> impl Parser<'a, Token> {
+    right(
+        zero_or_more(whitespace()),
+        map(
+            one_or_more(
+                single_quote_part()
+                    .or(double_quote_part())
+                    .or(unquoted_token_part()),
+            ),
+            |parts| Token { parts },
+        ),
+    )
+}
+
+fn unquoted_token_part<'a>() -> impl Parser<'a, TokenPart> {
+    map(
+        match_until(|c| c.is_whitespace() || c == '"' || c == '\''),
+        TokenPart::Unquoted,
+    )
+}
+
+fn single_quote_part<'a>() -> impl Parser<'a, TokenPart> {
+    map(
+        right(
+            match_single_quote(),
+            left(match_until_char('\''), match_single_quote()),
+        ),
+        TokenPart::SingleQuoted,
+    )
+}
+
+fn double_quote_part<'a>() -> impl Parser<'a, TokenPart> {
+    map(
+        right(
+            match_double_quote(),
+            left(match_until_char('"'), match_double_quote()),
+        ),
+        TokenPart::DoubleQuoted,
+    )
+}
