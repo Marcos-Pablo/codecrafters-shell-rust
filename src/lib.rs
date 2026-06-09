@@ -115,9 +115,16 @@ fn execute_command(exec_path: PathBuf, args: &[Token]) {
 }
 
 fn echo_cmd(args: &[Token]) {
-    args[1..]
-        .iter()
-        .for_each(|token| print!("{}", token.to_string()));
+    let mut first = true;
+
+    for token in &args[1..] {
+        if !first {
+            print!(" ");
+        }
+        print!("{}", token.to_string());
+
+        first = false;
+    }
     println!();
 }
 
