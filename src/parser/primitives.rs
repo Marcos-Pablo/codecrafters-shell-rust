@@ -106,10 +106,6 @@ where
             matched.push(next);
         }
 
-        if matched.is_empty() {
-            return Err(input);
-        }
-
         let next_index = matched.len();
         Ok((&input[next_index..], matched))
     }

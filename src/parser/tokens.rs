@@ -26,10 +26,16 @@ fn token<'a>() -> impl Parser<'a, Token> {
 }
 
 fn unquoted_token_part<'a>() -> impl Parser<'a, TokenPart> {
-    map(
-        match_until(|c| c.is_whitespace() || c == '"' || c == '\''),
-        TokenPart::Unquoted,
-    )
+    move |input| {
+        let parser = match_until(|c| c.is_whitespace() || c == '"' || c == '\'');
+        match parser.parse(input) {
+            Ok((next_input, result)) if !result.is_empty() => {
+                Ok((next_input, TokenPart::Unquoted(result)))
+            }
+            Ok(_) => Err(input),
+            Err(err) => Err(err),
+        }
+    }
 }
 
 fn single_quote_part<'a>() -> impl Parser<'a, TokenPart> {
