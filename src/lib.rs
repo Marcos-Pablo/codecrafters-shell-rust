@@ -33,7 +33,6 @@ impl Shell {
             let Ok((_, args)) = parser::tokenize(&input.trim()) else {
                 continue;
             };
-            dbg!(&args);
 
             let Some(first_token) = args.get(0) else {
                 continue;
