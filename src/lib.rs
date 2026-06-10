@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use which::which;
 
-use crate::parser::{Token, TokenPart};
+use crate::parser::Token;
 
 mod parser;
 
@@ -38,14 +38,7 @@ impl Shell {
                 continue;
             };
 
-            let Some(first_part) = first_token.parts.get(0) else {
-                continue;
-            };
-
-            let command = match first_part {
-                TokenPart::Unquoted(part) => part,
-                _ => continue,
-            };
+            let command = first_token.to_string();
 
             match command.as_str() {
                 "exit" => std::process::exit(0),
