@@ -54,7 +54,13 @@ fn double_quote_part<'a>() -> impl Parser<'a, TokenPart> {
     map(
         right(
             match_double_quote(),
-            left(match_until_char('"'), match_double_quote()),
+            left(
+                match_until_pred_with_escape(
+                    |c| c == '"',
+                    |c| matches!(c, '"' | '\\' | '$' | '`' | '\n'),
+                ),
+                match_double_quote(),
+            ),
         ),
         TokenPart::DoubleQuoted,
     )
