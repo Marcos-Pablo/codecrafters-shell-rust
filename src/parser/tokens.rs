@@ -1,5 +1,5 @@
 use crate::parser::primitives::{
-    left, map, match_double_quote, match_single_quote, match_until_char, match_until_pred,
+    left, map, match_double_quote, match_single_quote, match_until_char,
     match_until_pred_with_escape, one_or_more, whitespace, zero_or_more,
 };
 use crate::parser::{Token, TokenPart};
