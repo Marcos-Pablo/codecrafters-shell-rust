@@ -1,6 +1,6 @@
 use crate::parser::primitives::{
-    left, map, match_double_quote, match_single_quote, match_until, match_until_char, one_or_more,
-    whitespace, zero_or_more,
+    left, map, match_double_quote, match_single_quote, match_until_char, match_until_pred,
+    match_until_pred_with_escape, one_or_more, whitespace, zero_or_more,
 };
 use crate::parser::{Token, TokenPart};
 
@@ -27,7 +27,9 @@ fn token<'a>() -> impl Parser<'a, Token> {
 
 fn unquoted_token_part<'a>() -> impl Parser<'a, TokenPart> {
     move |input| {
-        let parser = match_until(|c| c.is_whitespace() || c == '"' || c == '\'');
+        let parser =
+            match_until_pred_with_escape(|c| c.is_whitespace() || c == '"' || c == '\'', |_| true);
+
         match parser.parse(input) {
             Ok((next_input, result)) if !result.is_empty() => {
                 Ok((next_input, TokenPart::Unquoted(result)))

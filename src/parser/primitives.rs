@@ -65,28 +65,10 @@ where
 }
 
 pub(crate) fn match_until_char<'a>(ch: char) -> impl Parser<'a, String> {
-    move |input: &'a str| {
-        if input.is_empty() {
-            return Err(input);
-        }
-
-        let mut chars = input.chars();
-        let mut matched = String::new();
-
-        while let Some(next) = chars.next() {
-            if next == ch {
-                break;
-            }
-
-            matched.push(next);
-        }
-
-        let next_index = matched.len();
-        Ok((&input[next_index..], matched))
-    }
+    match_until_pred(move |c| c == ch)
 }
 
-pub(crate) fn match_until<'a, F>(pred: F) -> impl Parser<'a, String>
+pub(crate) fn match_until_pred<'a, F>(pred: F) -> impl Parser<'a, String>
 where
     F: Fn(char) -> bool,
 {
@@ -107,6 +89,51 @@ where
         }
 
         let next_index = matched.len();
+        Ok((&input[next_index..], matched))
+    }
+}
+
+pub(crate) fn match_until_pred_with_escape<'a, F1, F2>(
+    pred: F1,
+    should_escape: F2,
+) -> impl Parser<'a, String>
+where
+    F1: Fn(char) -> bool,
+    F2: Fn(char) -> bool,
+{
+    move |input: &'a str| {
+        if input.is_empty() {
+            return Err(input);
+        }
+
+        let mut chars = input.chars();
+        let mut matched = String::new();
+
+        while let Some(next) = chars.next() {
+            if next == '\\' {
+                match chars.next() {
+                    Some(escaped) if should_escape(escaped) => {
+                        matched.push(escaped);
+                    }
+                    Some(escaped) => {
+                        matched.push(next);
+                        matched.push(escaped);
+                    }
+                    None => {
+                        matched.push(next);
+                    }
+                }
+                continue;
+            }
+
+            if pred(next) {
+                let next_index = input.len() - chars.as_str().len() - 1;
+                return Ok((&input[next_index..], matched));
+            }
+
+            matched.push(next);
+        }
+        let next_index = input.len() - chars.as_str().len();
         Ok((&input[next_index..], matched))
     }
 }
