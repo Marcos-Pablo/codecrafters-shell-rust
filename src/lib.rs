@@ -1,11 +1,12 @@
-use std::fs;
-use std::io::{self, Write};
+use std::fs::{self, File};
+use std::io;
+use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use which::which;
 
-use crate::parser::Token;
+use crate::parser::ShellCommand;
 
 mod parser;
 
@@ -30,42 +31,65 @@ impl Shell {
                 .read_line(&mut input)
                 .expect("Error reading input");
 
-            let Ok((_, args)) = parser::tokenize(&input.trim()) else {
+            let Ok((remaining, tokens)) = parser::tokenize(&input.trim()) else {
                 continue;
             };
 
-            let Some(first_token) = args.get(0) else {
+            if !remaining.is_empty() {
+                eprintln!("Couldn't parse the entire input, remaining portion: {remaining}");
                 continue;
-            };
+            }
 
-            let command = first_token.to_string();
-
-            match command.as_str() {
-                "exit" => std::process::exit(0),
-                "echo" => echo_cmd(&args),
-                "type" => type_cmd(&args),
-                "pwd" => self.pwd_cmd(),
-                "cd" => self.cd_cmd(&args),
-                cmd if let Some(exec_path) = command_path(cmd) => {
-                    execute_command(exec_path, &args);
+            let command = match parser::parse_command(&tokens) {
+                Ok(c) => c,
+                Err(err) => {
+                    eprintln!("{err}");
+                    continue;
                 }
-                _ => println!("{command}: command not found"),
+            };
+
+            let mut file_handle;
+            let writer: &mut dyn Write = match &command.redirect {
+                Some(parser::Redirect::Stdout(file_path)) => match File::create(&file_path) {
+                    Ok(file) => {
+                        file_handle = Some(file);
+                        file_handle.as_mut().unwrap()
+                    }
+                    Err(err) => {
+                        eprintln!("Error opening redirect file: {file_path}: {err}");
+                        continue;
+                    }
+                },
+                _ => &mut io::stdout(),
+            };
+
+            match command.name.as_str() {
+                "exit" => std::process::exit(0),
+                "echo" => echo_cmd(&command, writer),
+                "type" => type_cmd(&command, writer),
+                "pwd" => self.pwd_cmd(writer),
+                "cd" => self.cd_cmd(&command),
+                cmd if let Some(exec_path) = command_path(cmd) => {
+                    execute_command(exec_path, &command);
+                }
+                _ => println!("{}: command not found", command.name),
             }
         }
     }
 
-    fn pwd_cmd(&self) {
-        println!("{}", self.curr_dir.display());
+    fn pwd_cmd(&self, writer: &mut dyn Write) {
+        writeln!(writer, "{}", self.curr_dir.display()).expect("Error writing to stdout");
     }
 
-    fn cd_cmd(&mut self, args: &[Token]) {
-        if args.len() > 2 {
+    fn cd_cmd(&mut self, command: &ShellCommand) {
+        if command.args.len() > 1 {
             eprintln!("usage: cd <path>");
             return;
         }
 
-        let path = args
-            .get(1)
+        let path = command
+            .args
+            .get(0)
             .filter(|t| !t.is_empty())
             .map(|t| t.to_string())
             .unwrap_or("~".to_string());
@@ -95,41 +119,53 @@ fn command_path(cmd: &str) -> Option<PathBuf> {
     which(cmd).ok()
 }
 
-fn execute_command(exec_path: PathBuf, args: &[Token]) {
-    let arg0 = args[0].to_string();
-    let args: Vec<String> = args.iter().skip(1).map(|token| token.to_string()).collect();
+fn execute_command(exec_path: PathBuf, command: &ShellCommand) {
+    let mut extern_cmd = Command::new(&exec_path);
+    extern_cmd.arg0(&command.name);
+    extern_cmd.args(&command.args);
 
-    let status = Command::new(&exec_path).arg0(&arg0).args(&args).status();
+    match &command.redirect {
+        Some(parser::Redirect::Stdout(file_path)) => {
+            let Ok(file) = File::create(&file_path) else {
+                eprintln!("Error opening the file: {file_path}");
+                return;
+            };
+            extern_cmd.stdout(Stdio::from(file));
+        }
+        _ => (),
+    }
 
-    match status {
+    match extern_cmd.status() {
         Ok(_) => (),
         Err(e) => eprintln!("Failed to execute command: {e}"),
     }
 }
 
-fn echo_cmd(args: &[Token]) {
+fn echo_cmd(command: &ShellCommand, writer: &mut dyn Write) {
     let mut first = true;
 
-    for token in &args[1..] {
+    for arg in &command.args {
         if !first {
-            print!(" ");
+            write!(writer, " ").expect("Error writing to stdout");
         }
-        print!("{}", token.to_string());
+        write!(writer, "{arg}").expect("Error writing to stdout");
 
         first = false;
     }
-    println!();
+    writeln!(writer).expect("Error writing to stdout");
 }
 
-fn type_cmd(args: &[Token]) {
-    for arg in &args[1..] {
-        let token = arg.to_string();
-        match token.as_str() {
-            arg if is_built_in(arg) => println!("{arg} is a shell builtin"),
-            arg if let Some(exec_path) = command_path(arg) => {
-                println!("{arg} is {}", exec_path.display())
+fn type_cmd(command: &ShellCommand, writer: &mut dyn Write) {
+    for arg in &command.args {
+        match arg.as_str() {
+            arg if is_built_in(arg) => {
+                writeln!(writer, "{arg} is a shell builtin").expect("Error writing to stdout");
             }
-            _ => println!("{token}: not found"),
+            arg if let Some(exec_path) = command_path(arg) => {
+                writeln!(writer, "{arg} is {}", exec_path.display())
+                    .expect("Error writing to stdout");
+            }
+            _ => writeln!(writer, "{arg}: not found").expect("Error writing to stdout"),
         }
     }
 }
