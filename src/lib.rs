@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::fs::{self, File};
 use std::io;
 use std::io::Write;
@@ -6,12 +7,43 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use which::which;
 
-use crate::parser::ShellCommand;
+use crate::parser::{Redirect, ShellCommand};
 
 mod parser;
 
 pub struct Shell {
     curr_dir: PathBuf,
+}
+
+struct Output {
+    stdout: Box<dyn Write>,
+    stderr: Box<dyn Write>,
+}
+
+impl Output {
+    fn new(command: &ShellCommand) -> Result<Output, Box<dyn Error>> {
+        let mut stdout: Box<dyn Write> = Box::new(io::stdout());
+        let mut stderr: Box<dyn Write> = Box::new(io::stderr());
+
+        if let Some(redirect) = &command.redirect {
+            match redirect {
+                Redirect::Stdout(file_path) => match File::create(&file_path) {
+                    Ok(file) => {
+                        stdout = Box::new(file);
+                    }
+                    Err(e) => return Err(Box::new(e)),
+                },
+                Redirect::Stderr(file_path) => match File::create(&file_path) {
+                    Ok(file) => {
+                        stderr = Box::new(file);
+                    }
+                    Err(e) => return Err(Box::new(e)),
+                },
+            }
+        }
+
+        Ok(Output { stdout, stderr })
+    }
 }
 
 impl Shell {
@@ -48,26 +80,11 @@ impl Shell {
                 }
             };
 
-            let mut file_handle;
-            let writer: &mut dyn Write = match &command.redirect {
-                Some(parser::Redirect::Stdout(file_path)) => match File::create(&file_path) {
-                    Ok(file) => {
-                        file_handle = Some(file);
-                        file_handle.as_mut().unwrap()
-                    }
-                    Err(err) => {
-                        eprintln!("Error opening redirect file: {file_path}: {err}");
-                        continue;
-                    }
-                },
-                _ => &mut io::stdout(),
-            };
-
             match command.name.as_str() {
                 "exit" => std::process::exit(0),
-                "echo" => echo_cmd(&command, writer),
-                "type" => type_cmd(&command, writer),
-                "pwd" => self.pwd_cmd(writer),
+                "echo" => echo_cmd(&command),
+                "type" => type_cmd(&command),
+                "pwd" => self.pwd_cmd(&command),
                 "cd" => self.cd_cmd(&command),
                 cmd if let Some(exec_path) = command_path(cmd) => {
                     execute_command(exec_path, &command);
@@ -77,8 +94,15 @@ impl Shell {
         }
     }
 
-    fn pwd_cmd(&self, writer: &mut dyn Write) {
-        writeln!(writer, "{}", self.curr_dir.display()).expect("Error writing to stdout");
+    fn pwd_cmd(&self, command: &ShellCommand) {
+        let mut output = match Output::new(&command) {
+            Ok(o) => o,
+            Err(e) => {
+                eprintln!("{e}");
+                return;
+            }
+        };
+        writeln!(output.stdout, "{}", self.curr_dir.display()).expect("Error writing to stdout");
     }
 
     fn cd_cmd(&mut self, command: &ShellCommand) {
@@ -124,6 +148,30 @@ fn execute_command(exec_path: PathBuf, command: &ShellCommand) {
     extern_cmd.arg0(&command.name);
     extern_cmd.args(&command.args);
 
+    if let Some(redirect) = &command.redirect {
+        match redirect {
+            Redirect::Stdout(file_path) => {
+                let file = match File::create(&file_path) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!("{e}");
+                        return;
+                    }
+                };
+                extern_cmd.stdout(Stdio::from(file));
+            }
+            Redirect::Stderr(file_path) => {
+                let file = match File::create(&file_path) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!("{e}");
+                        return;
+                    }
+                };
+                extern_cmd.stderr(Stdio::from(file));
+            }
+        }
+    }
     match &command.redirect {
         Some(parser::Redirect::Stdout(file_path)) => {
             let Ok(file) = File::create(&file_path) else {
@@ -141,31 +189,48 @@ fn execute_command(exec_path: PathBuf, command: &ShellCommand) {
     }
 }
 
-fn echo_cmd(command: &ShellCommand, writer: &mut dyn Write) {
+fn echo_cmd(command: &ShellCommand) {
+    let mut output = match Output::new(&command) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("{e}");
+            return;
+        }
+    };
+
     let mut first = true;
 
     for arg in &command.args {
         if !first {
-            write!(writer, " ").expect("Error writing to stdout");
+            write!(output.stdout, " ").expect("Error writing to stdout");
         }
-        write!(writer, "{arg}").expect("Error writing to stdout");
+        write!(output.stdout, "{arg}").expect("Error writing to stdout");
 
         first = false;
     }
-    writeln!(writer).expect("Error writing to stdout");
+    writeln!(output.stdout).expect("Error writing to stdout");
 }
 
-fn type_cmd(command: &ShellCommand, writer: &mut dyn Write) {
+fn type_cmd(command: &ShellCommand) {
+    let mut output = match Output::new(&command) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("{e}");
+            return;
+        }
+    };
+
     for arg in &command.args {
         match arg.as_str() {
             arg if is_built_in(arg) => {
-                writeln!(writer, "{arg} is a shell builtin").expect("Error writing to stdout");
-            }
-            arg if let Some(exec_path) = command_path(arg) => {
-                writeln!(writer, "{arg} is {}", exec_path.display())
+                writeln!(output.stdout, "{arg} is a shell builtin")
                     .expect("Error writing to stdout");
             }
-            _ => writeln!(writer, "{arg}: not found").expect("Error writing to stdout"),
+            arg if let Some(exec_path) = command_path(arg) => {
+                writeln!(output.stdout, "{arg} is {}", exec_path.display())
+                    .expect("Error writing to stdout");
+            }
+            _ => writeln!(output.stdout, "{arg}: not found").expect("Error writing to stdout"),
         }
     }
 }
