@@ -46,6 +46,17 @@ impl Output {
                         Err(e) => return Err(Box::new(e)),
                     }
                 }
+                Redirect::AppendStderr(file_path) => {
+                    match fs::OpenOptions::new()
+                        .write(true)
+                        .append(true)
+                        .create(true)
+                        .open(file_path)
+                    {
+                        Ok(file) => stderr = Box::new(file),
+                        Err(e) => return Err(Box::new(e)),
+                    }
+                }
             }
         }
 
@@ -194,6 +205,21 @@ fn execute_command(exec_path: PathBuf, command: &ShellCommand) {
                     }
                 };
                 extern_cmd.stdout(Stdio::from(file));
+            }
+            Redirect::AppendStderr(file_path) => {
+                let file = match fs::OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .create(true)
+                    .open(file_path)
+                {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!("{e}");
+                        return;
+                    }
+                };
+                extern_cmd.stderr(Stdio::from(file));
             }
         }
     }
