@@ -17,7 +17,7 @@ pub struct Shell {
 
 struct Output {
     stdout: Box<dyn Write>,
-    stderr: Box<dyn Write>,
+    _stderr: Box<dyn Write>,
 }
 
 impl Output {
@@ -28,21 +28,31 @@ impl Output {
         if let Some(redirect) = &command.redirect {
             match redirect {
                 Redirect::Stdout(file_path) => match File::create(&file_path) {
-                    Ok(file) => {
-                        stdout = Box::new(file);
-                    }
+                    Ok(file) => stdout = Box::new(file),
                     Err(e) => return Err(Box::new(e)),
                 },
                 Redirect::Stderr(file_path) => match File::create(&file_path) {
-                    Ok(file) => {
-                        stderr = Box::new(file);
-                    }
+                    Ok(file) => stderr = Box::new(file),
                     Err(e) => return Err(Box::new(e)),
                 },
+                Redirect::AppendStdout(file_path) => {
+                    match fs::OpenOptions::new()
+                        .write(true)
+                        .append(true)
+                        .create(true)
+                        .open(file_path)
+                    {
+                        Ok(file) => stdout = Box::new(file),
+                        Err(e) => return Err(Box::new(e)),
+                    }
+                }
             }
         }
 
-        Ok(Output { stdout, stderr })
+        Ok(Output {
+            stdout,
+            _stderr: stderr,
+        })
     }
 }
 
@@ -169,6 +179,21 @@ fn execute_command(exec_path: PathBuf, command: &ShellCommand) {
                     }
                 };
                 extern_cmd.stderr(Stdio::from(file));
+            }
+            Redirect::AppendStdout(file_path) => {
+                let file = match fs::OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .create(true)
+                    .open(file_path)
+                {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!("{e}");
+                        return;
+                    }
+                };
+                extern_cmd.stdout(Stdio::from(file));
             }
         }
     }

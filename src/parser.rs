@@ -37,6 +37,7 @@ pub struct ShellCommand {
 pub enum Redirect {
     Stdout(String),
     Stderr(String),
+    AppendStdout(String),
 }
 
 impl Token {
@@ -80,6 +81,7 @@ pub fn parse_command(tokens: &[Token]) -> Result<ShellCommand, String> {
             redirect = match content.as_str() {
                 ">" | "1>" => Some(Redirect::Stdout(file_name)),
                 "2>" => Some(Redirect::Stderr(file_name)),
+                ">>" | "1>>" => Some(Redirect::AppendStdout(file_name)),
                 _ => None,
             };
             continue;
@@ -104,5 +106,5 @@ pub fn parse_command(tokens: &[Token]) -> Result<ShellCommand, String> {
 }
 
 fn is_redirect_token(token: &str) -> bool {
-    matches!(token, ">" | "1>" | "2>")
+    matches!(token, ">" | "1>" | "2>" | ">>" | "1>>")
 }
