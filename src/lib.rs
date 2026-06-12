@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::fs::{self, File};
 use std::io;
 use std::io::Write;
@@ -21,49 +20,11 @@ struct Output {
 }
 
 impl Output {
-    fn new(command: &ShellCommand) -> Result<Output, Box<dyn Error>> {
-        let mut stdout: Box<dyn Write> = Box::new(io::stdout());
-        let mut stderr: Box<dyn Write> = Box::new(io::stderr());
-
-        if let Some(redirect) = &command.redirect {
-            match redirect {
-                Redirect::Stdout(file_path) => match File::create(&file_path) {
-                    Ok(file) => stdout = Box::new(file),
-                    Err(e) => return Err(Box::new(e)),
-                },
-                Redirect::Stderr(file_path) => match File::create(&file_path) {
-                    Ok(file) => stderr = Box::new(file),
-                    Err(e) => return Err(Box::new(e)),
-                },
-                Redirect::AppendStdout(file_path) => {
-                    match fs::OpenOptions::new()
-                        .write(true)
-                        .append(true)
-                        .create(true)
-                        .open(file_path)
-                    {
-                        Ok(file) => stdout = Box::new(file),
-                        Err(e) => return Err(Box::new(e)),
-                    }
-                }
-                Redirect::AppendStderr(file_path) => {
-                    match fs::OpenOptions::new()
-                        .write(true)
-                        .append(true)
-                        .create(true)
-                        .open(file_path)
-                    {
-                        Ok(file) => stderr = Box::new(file),
-                        Err(e) => return Err(Box::new(e)),
-                    }
-                }
-            }
-        }
-
-        Ok(Output {
+    fn new(stdout: Box<dyn Write>, stderr: Box<dyn Write>) -> Output {
+        Output {
             stdout,
             _stderr: stderr,
-        })
+        }
     }
 }
 
@@ -101,11 +62,21 @@ impl Shell {
                 }
             };
 
+            let (stdout, stderr) = match open_redirects(&command) {
+                Ok(pair) => pair,
+                Err(err) => {
+                    eprintln!("{err}");
+                    continue;
+                }
+            };
+
+            let mut output = Output::new(stdout, stderr);
+
             match command.name.as_str() {
                 "exit" => std::process::exit(0),
-                "echo" => echo_cmd(&command),
-                "type" => type_cmd(&command),
-                "pwd" => self.pwd_cmd(&command),
+                "echo" => echo_cmd(&command, &mut output),
+                "type" => type_cmd(&command, &mut output),
+                "pwd" => self.pwd_cmd(&mut output),
                 "cd" => self.cd_cmd(&command),
                 cmd if let Some(exec_path) = command_path(cmd) => {
                     execute_command(exec_path, &command);
@@ -115,14 +86,7 @@ impl Shell {
         }
     }
 
-    fn pwd_cmd(&self, command: &ShellCommand) {
-        let mut output = match Output::new(&command) {
-            Ok(o) => o,
-            Err(e) => {
-                eprintln!("{e}");
-                return;
-            }
-        };
+    fn pwd_cmd(&self, output: &mut Output) {
         writeln!(output.stdout, "{}", self.curr_dir.display()).expect("Error writing to stdout");
     }
 
@@ -240,15 +204,7 @@ fn execute_command(exec_path: PathBuf, command: &ShellCommand) {
     }
 }
 
-fn echo_cmd(command: &ShellCommand) {
-    let mut output = match Output::new(&command) {
-        Ok(o) => o,
-        Err(e) => {
-            eprintln!("{e}");
-            return;
-        }
-    };
-
+fn echo_cmd(command: &ShellCommand, output: &mut Output) {
     let mut first = true;
 
     for arg in &command.args {
@@ -262,15 +218,7 @@ fn echo_cmd(command: &ShellCommand) {
     writeln!(output.stdout).expect("Error writing to stdout");
 }
 
-fn type_cmd(command: &ShellCommand) {
-    let mut output = match Output::new(&command) {
-        Ok(o) => o,
-        Err(e) => {
-            eprintln!("{e}");
-            return;
-        }
-    };
-
+fn type_cmd(command: &ShellCommand, output: &mut Output) {
     for arg in &command.args {
         match arg.as_str() {
             arg if is_built_in(arg) => {
@@ -284,4 +232,36 @@ fn type_cmd(command: &ShellCommand) {
             _ => writeln!(output.stdout, "{arg}: not found").expect("Error writing to stdout"),
         }
     }
+}
+
+fn open_redirects(command: &ShellCommand) -> Result<(Box<dyn Write>, Box<dyn Write>), io::Error> {
+    let mut stdout: Box<dyn Write> = Box::new(io::stdout());
+    let mut stderr: Box<dyn Write> = Box::new(io::stderr());
+
+    if let Some(redirect) = &command.redirect {
+        match redirect {
+            Redirect::Stdout(file_path) => stdout = Box::new(File::create(&file_path)?),
+            Redirect::Stderr(file_path) => stderr = Box::new(File::create(&file_path)?),
+            Redirect::AppendStdout(file_path) => {
+                stdout = Box::new(
+                    fs::OpenOptions::new()
+                        .write(true)
+                        .append(true)
+                        .create(true)
+                        .open(file_path)?,
+                )
+            }
+            Redirect::AppendStderr(file_path) => {
+                stderr = Box::new(
+                    fs::OpenOptions::new()
+                        .write(true)
+                        .append(true)
+                        .create(true)
+                        .open(file_path)?,
+                )
+            }
+        }
+    }
+
+    Ok((stdout, stderr))
 }
