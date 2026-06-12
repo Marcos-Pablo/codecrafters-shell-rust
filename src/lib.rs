@@ -62,21 +62,25 @@ impl Shell {
                 }
             };
 
-            let (stdout, stderr) = match open_redirects(&command) {
-                Ok(pair) => pair,
-                Err(err) => {
-                    eprintln!("{err}");
-                    continue;
-                }
-            };
-
-            let mut output = Output::new(stdout, stderr);
-
             match command.name.as_str() {
                 "exit" => std::process::exit(0),
-                "echo" => echo_cmd(&command, &mut output),
-                "type" => type_cmd(&command, &mut output),
-                "pwd" => self.pwd_cmd(&mut output),
+                "echo" | "type" | "pwd" => {
+                    let (stdout, stderr) = match open_redirects(&command) {
+                        Ok(pair) => pair,
+                        Err(err) => {
+                            eprintln!("{err}");
+                            continue;
+                        }
+                    };
+                    let mut output = Output::new(stdout, stderr);
+
+                    match command.name.as_str() {
+                        "echo" => echo_cmd(&command, &mut output),
+                        "type" => type_cmd(&command, &mut output),
+                        "pwd" => self.pwd_cmd(&mut output),
+                        _ => unreachable!(),
+                    }
+                }
                 "cd" => self.cd_cmd(&command),
                 cmd if let Some(exec_path) = command_path(cmd) => {
                     execute_command(exec_path, &command);
@@ -134,69 +138,19 @@ fn execute_command(exec_path: PathBuf, command: &ShellCommand) {
     extern_cmd.args(&command.args);
 
     if let Some(redirect) = &command.redirect {
-        match redirect {
-            Redirect::Stdout(file_path) => {
-                let file = match File::create(&file_path) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        eprintln!("{e}");
-                        return;
-                    }
-                };
-                extern_cmd.stdout(Stdio::from(file));
-            }
-            Redirect::Stderr(file_path) => {
-                let file = match File::create(&file_path) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        eprintln!("{e}");
-                        return;
-                    }
-                };
-                extern_cmd.stderr(Stdio::from(file));
-            }
-            Redirect::AppendStdout(file_path) => {
-                let file = match fs::OpenOptions::new()
-                    .write(true)
-                    .append(true)
-                    .create(true)
-                    .open(file_path)
-                {
-                    Ok(f) => f,
-                    Err(e) => {
-                        eprintln!("{e}");
-                        return;
-                    }
-                };
-                extern_cmd.stdout(Stdio::from(file));
-            }
-            Redirect::AppendStderr(file_path) => {
-                let file = match fs::OpenOptions::new()
-                    .write(true)
-                    .append(true)
-                    .create(true)
-                    .open(file_path)
-                {
-                    Ok(f) => f,
-                    Err(e) => {
-                        eprintln!("{e}");
-                        return;
-                    }
-                };
-                extern_cmd.stderr(Stdio::from(file));
-            }
-        }
-    }
-    match &command.redirect {
-        Some(parser::Redirect::Stdout(file_path)) => {
-            let Ok(file) = File::create(&file_path) else {
-                eprintln!("Error opening the file: {file_path}");
+        let file = match open_file_redirects(redirect) {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("{e}");
                 return;
-            };
-            extern_cmd.stdout(Stdio::from(file));
-        }
-        _ => (),
-    }
+            }
+        };
+
+        match redirect {
+            Redirect::Stdout(_) | Redirect::AppendStdout(_) => extern_cmd.stdout(Stdio::from(file)),
+            Redirect::Stderr(_) | Redirect::AppendStderr(_) => extern_cmd.stderr(Stdio::from(file)),
+        };
+    };
 
     match extern_cmd.status() {
         Ok(_) => (),
@@ -239,29 +193,25 @@ fn open_redirects(command: &ShellCommand) -> Result<(Box<dyn Write>, Box<dyn Wri
     let mut stderr: Box<dyn Write> = Box::new(io::stderr());
 
     if let Some(redirect) = &command.redirect {
+        let file = Box::new(open_file_redirects(redirect)?);
         match redirect {
-            Redirect::Stdout(file_path) => stdout = Box::new(File::create(&file_path)?),
-            Redirect::Stderr(file_path) => stderr = Box::new(File::create(&file_path)?),
-            Redirect::AppendStdout(file_path) => {
-                stdout = Box::new(
-                    fs::OpenOptions::new()
-                        .write(true)
-                        .append(true)
-                        .create(true)
-                        .open(file_path)?,
-                )
-            }
-            Redirect::AppendStderr(file_path) => {
-                stderr = Box::new(
-                    fs::OpenOptions::new()
-                        .write(true)
-                        .append(true)
-                        .create(true)
-                        .open(file_path)?,
-                )
-            }
+            Redirect::Stdout(_) | Redirect::AppendStdout(_) => stdout = file,
+            Redirect::Stderr(_) | Redirect::AppendStderr(_) => stderr = file,
         }
     }
 
     Ok((stdout, stderr))
+}
+
+fn open_file_redirects(redirect: &Redirect) -> Result<File, io::Error> {
+    match redirect {
+        Redirect::Stdout(file_path) | Redirect::Stderr(file_path) => Ok(File::create(&file_path)?),
+        Redirect::AppendStdout(file_path) | Redirect::AppendStderr(file_path) => {
+            Ok(fs::OpenOptions::new()
+                .write(true)
+                .append(true)
+                .create(true)
+                .open(file_path)?)
+        }
+    }
 }
