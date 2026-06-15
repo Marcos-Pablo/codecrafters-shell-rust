@@ -1,31 +1,20 @@
-use std::fs::{self, File};
+use std::fs;
 use std::io;
 use std::io::Write;
-use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+
 use which::which;
 
+use crate::builtin::{echo_cmd, type_cmd, Output};
+use crate::external::execute_command;
 use crate::parser::{Redirect, ShellCommand};
 
+mod builtin;
+mod external;
 mod parser;
 
 pub struct Shell {
     curr_dir: PathBuf,
-}
-
-struct Output {
-    stdout: Box<dyn Write>,
-    _stderr: Box<dyn Write>,
-}
-
-impl Output {
-    fn new(stdout: Box<dyn Write>, stderr: Box<dyn Write>) -> Output {
-        Output {
-            stdout,
-            _stderr: stderr,
-        }
-    }
 }
 
 impl Shell {
@@ -64,8 +53,9 @@ impl Shell {
 
             match command.name.as_str() {
                 "exit" => std::process::exit(0),
+                "cd" => self.cd_cmd(&command),
                 "echo" | "type" | "pwd" => {
-                    let (stdout, stderr) = match open_redirects(&command) {
+                    let (stdout, stderr) = match builtin::open_builtin_redirects(&command) {
                         Ok(pair) => pair,
                         Err(err) => {
                             eprintln!("{err}");
@@ -81,7 +71,6 @@ impl Shell {
                         _ => unreachable!(),
                     }
                 }
-                "cd" => self.cd_cmd(&command),
                 cmd if let Some(exec_path) = command_path(cmd) => {
                     execute_command(exec_path, &command);
                 }
@@ -124,88 +113,15 @@ impl Shell {
     }
 }
 
-fn is_built_in(command: &str) -> bool {
-    matches!(command, "echo" | "exit" | "type" | "pwd")
-}
-
 fn command_path(cmd: &str) -> Option<PathBuf> {
     which(cmd).ok()
 }
 
-fn execute_command(exec_path: PathBuf, command: &ShellCommand) {
-    let mut extern_cmd = Command::new(&exec_path);
-    extern_cmd.arg0(&command.name);
-    extern_cmd.args(&command.args);
-
-    if let Some(redirect) = &command.redirect {
-        let file = match open_file_redirects(redirect) {
-            Ok(f) => f,
-            Err(e) => {
-                eprintln!("{e}");
-                return;
-            }
-        };
-
-        match redirect {
-            Redirect::Stdout(_) | Redirect::AppendStdout(_) => extern_cmd.stdout(Stdio::from(file)),
-            Redirect::Stderr(_) | Redirect::AppendStderr(_) => extern_cmd.stderr(Stdio::from(file)),
-        };
-    };
-
-    match extern_cmd.status() {
-        Ok(_) => (),
-        Err(e) => eprintln!("Failed to execute command: {e}"),
-    }
-}
-
-fn echo_cmd(command: &ShellCommand, output: &mut Output) {
-    let mut first = true;
-
-    for arg in &command.args {
-        if !first {
-            write!(output.stdout, " ").expect("Error writing to stdout");
-        }
-        write!(output.stdout, "{arg}").expect("Error writing to stdout");
-
-        first = false;
-    }
-    writeln!(output.stdout).expect("Error writing to stdout");
-}
-
-fn type_cmd(command: &ShellCommand, output: &mut Output) {
-    for arg in &command.args {
-        match arg.as_str() {
-            arg if is_built_in(arg) => {
-                writeln!(output.stdout, "{arg} is a shell builtin")
-                    .expect("Error writing to stdout");
-            }
-            arg if let Some(exec_path) = command_path(arg) => {
-                writeln!(output.stdout, "{arg} is {}", exec_path.display())
-                    .expect("Error writing to stdout");
-            }
-            _ => writeln!(output.stdout, "{arg}: not found").expect("Error writing to stdout"),
-        }
-    }
-}
-
-fn open_redirects(command: &ShellCommand) -> Result<(Box<dyn Write>, Box<dyn Write>), io::Error> {
-    let mut stdout: Box<dyn Write> = Box::new(io::stdout());
-    let mut stderr: Box<dyn Write> = Box::new(io::stderr());
-
-    if let Some(redirect) = &command.redirect {
-        let file = Box::new(open_file_redirects(redirect)?);
-        match redirect {
-            Redirect::Stdout(_) | Redirect::AppendStdout(_) => stdout = file,
-            Redirect::Stderr(_) | Redirect::AppendStderr(_) => stderr = file,
-        }
-    }
-
-    Ok((stdout, stderr))
-}
-
-fn open_file_redirects(redirect: &Redirect) -> Result<File, io::Error> {
+fn open_file_redirects(redirect: &Redirect) -> std::io::Result<std::fs::File> {
     match redirect {
-        Redirect::Stdout(file_path) | Redirect::Stderr(file_path) => Ok(File::create(&file_path)?),
+        Redirect::Stdout(file_path) | Redirect::Stderr(file_path) => {
+            Ok(std::fs::File::create(&file_path)?)
+        }
         Redirect::AppendStdout(file_path) | Redirect::AppendStderr(file_path) => {
             Ok(fs::OpenOptions::new()
                 .write(true)
