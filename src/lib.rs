@@ -1,11 +1,16 @@
 use std::fs;
-use std::io;
 use std::io::Write;
 use std::path::PathBuf;
 
+use rustyline::Editor;
+use rustyline::Helper;
+use rustyline::completion::{Completer, Pair};
+use rustyline::highlight::Highlighter;
+use rustyline::hint::Hinter;
+use rustyline::validate::Validator;
 use which::which;
 
-use crate::builtin::{echo_cmd, type_cmd, Output};
+use crate::builtin::{Output, echo_cmd, type_cmd};
 use crate::external::execute_command;
 use crate::parser::{Redirect, ShellCommand};
 
@@ -17,22 +22,58 @@ pub struct Shell {
     curr_dir: PathBuf,
 }
 
+struct ShellHelper {
+    builtins: Vec<String>,
+}
+
+impl Completer for ShellHelper {
+    type Candidate = Pair;
+
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        _ctx: &rustyline::Context<'_>,
+    ) -> rustyline::Result<(usize, Vec<Pair>)> {
+        let mut candidates = vec![];
+        let word = &line[..pos];
+        for candidate in &self.builtins {
+            if candidate.starts_with(word) {
+                candidates.push(Pair {
+                    display: candidate.clone() + " ",
+                    replacement: candidate.clone() + " ",
+                });
+            }
+        }
+
+        Ok((0, candidates))
+    }
+}
+
+impl Highlighter for ShellHelper {}
+impl Validator for ShellHelper {}
+impl Hinter for ShellHelper {
+    type Hint = String;
+}
+impl Helper for ShellHelper {}
+
 impl Shell {
     pub fn new(curr_dir: PathBuf) -> Shell {
         Shell { curr_dir }
     }
 
     pub fn run(mut self) {
-        let mut input = String::new();
+        let mut editor = match Editor::new() {
+            Ok(rl) => rl,
+            Err(e) => panic!("Error creating editor: {e}"),
+        };
+
+        editor.set_helper(Some(ShellHelper {
+            builtins: vec!["echo".to_string(), "exit".to_string()],
+        }));
 
         loop {
-            input.clear();
-            print!("$ ");
-            io::stdout().flush().expect("Error writing to stdout!");
-
-            std::io::stdin()
-                .read_line(&mut input)
-                .expect("Error reading input");
+            let input = editor.readline("$ ").expect("Error reading input");
 
             let Ok((remaining, tokens)) = parser::tokenize(&input.trim()) else {
                 continue;
