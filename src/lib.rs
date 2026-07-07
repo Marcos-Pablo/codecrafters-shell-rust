@@ -1,3 +1,4 @@
+use std::env;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -37,6 +38,7 @@ impl Completer for ShellHelper {
     ) -> rustyline::Result<(usize, Vec<Pair>)> {
         let mut candidates = vec![];
         let word = &line[..pos];
+
         for candidate in &self.builtins {
             if candidate.starts_with(word) {
                 candidates.push(Pair {
@@ -45,6 +47,30 @@ impl Completer for ShellHelper {
                 });
             }
         }
+
+        let full_path = env::var_os("PATH").unwrap_or_default();
+        for dir in env::split_paths(&full_path) {
+            let Ok(entries) = fs::read_dir(&dir) else {
+                continue;
+            };
+
+            for entry in entries.flatten() {
+                let name = match entry.file_name().into_string() {
+                    Ok(s) => s,
+                    Err(_) => continue,
+                };
+
+                if name.starts_with(word) {
+                    candidates.push(Pair {
+                        display: name.clone() + " ",
+                        replacement: name + " ",
+                    });
+                }
+            }
+        }
+
+        candidates.sort_by(|a, b| a.display.cmp(&b.display));
+        candidates.dedup_by(|a, b| a.display == b.display);
 
         Ok((0, candidates))
     }
