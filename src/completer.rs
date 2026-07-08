@@ -87,6 +87,8 @@ impl Completer for ShellHelper {
                     };
 
                     Pair {
+                        // this workaround is required because the returned display string doesn't
+                        // contain the slash when is a directory
                         display: pair.replacement.clone(),
                         replacement: pair.replacement + sufix,
                     }
