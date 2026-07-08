@@ -65,6 +65,10 @@ pub fn open_builtin_redirects(
     Ok((stdout, stderr))
 }
 
+pub fn get_builtins() -> &'static [&'static str] {
+    &["echo", "exit", "type", "pwd"]
+}
+
 fn is_built_in(command: &str) -> bool {
     matches!(command, "echo" | "exit" | "type" | "pwd")
 }
