@@ -25,7 +25,7 @@ impl ShellHelper {
         for &candidate in self.builtins {
             if candidate.starts_with(prefix) {
                 candidates.push(Pair {
-                    display: candidate.to_string() + " ",
+                    display: candidate.to_string(),
                     replacement: candidate.to_string() + " ",
                 });
             }
@@ -45,7 +45,7 @@ impl ShellHelper {
 
                 if name.starts_with(prefix) {
                     candidates.push(Pair {
-                        display: name.clone() + " ",
+                        display: name.clone(),
                         replacement: name + " ",
                     });
                 }
@@ -87,7 +87,7 @@ impl Completer for ShellHelper {
                     };
 
                     Pair {
-                        display: pair.display + sufix,
+                        display: pair.display,
                         replacement: pair.replacement + sufix,
                     }
                 })
