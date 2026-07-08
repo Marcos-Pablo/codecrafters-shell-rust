@@ -79,9 +79,17 @@ impl Completer for ShellHelper {
 
             let pairs = pairs
                 .into_iter()
-                .map(|pair| Pair {
-                    display: pair.display + " ",
-                    replacement: pair.replacement + " ",
+                .map(|pair| {
+                    let sufix = if pair.replacement.ends_with("/") {
+                        ""
+                    } else {
+                        " "
+                    };
+
+                    Pair {
+                        display: pair.display + sufix,
+                        replacement: pair.replacement + sufix,
+                    }
                 })
                 .collect();
 
