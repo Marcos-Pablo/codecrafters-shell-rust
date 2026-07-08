@@ -87,7 +87,7 @@ impl Completer for ShellHelper {
                     };
 
                     Pair {
-                        display: pair.display + "/",
+                        display: pair.replacement.clone(),
                         replacement: pair.replacement + sufix,
                     }
                 })
