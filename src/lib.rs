@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use rustyline::Editor;
 use rustyline::Helper;
 use rustyline::completion::{Completer, Pair};
+use rustyline::config::CompletionType;
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
@@ -27,20 +28,12 @@ struct ShellHelper {
     builtins: Vec<String>,
 }
 
-impl Completer for ShellHelper {
-    type Candidate = Pair;
-
-    fn complete(
-        &self,
-        line: &str,
-        pos: usize,
-        _ctx: &rustyline::Context<'_>,
-    ) -> rustyline::Result<(usize, Vec<Pair>)> {
+impl ShellHelper {
+    fn find_candidates(&self, prefix: &str) -> Vec<Pair> {
         let mut candidates = vec![];
-        let word = &line[..pos];
 
         for candidate in &self.builtins {
-            if candidate.starts_with(word) {
+            if candidate.starts_with(prefix) {
                 candidates.push(Pair {
                     display: candidate.clone() + " ",
                     replacement: candidate.clone() + " ",
@@ -60,7 +53,7 @@ impl Completer for ShellHelper {
                     Err(_) => continue,
                 };
 
-                if name.starts_with(word) {
+                if name.starts_with(prefix) {
                     candidates.push(Pair {
                         display: name.clone() + " ",
                         replacement: name + " ",
@@ -71,7 +64,22 @@ impl Completer for ShellHelper {
 
         candidates.sort_by(|a, b| a.display.cmp(&b.display));
         candidates.dedup_by(|a, b| a.display == b.display);
+        candidates
+    }
+}
 
+impl Completer for ShellHelper {
+    type Candidate = Pair;
+
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        _ctx: &rustyline::Context<'_>,
+    ) -> rustyline::Result<(usize, Vec<Pair>)> {
+        let prefix = &line[..pos];
+
+        let candidates = self.find_candidates(prefix);
         Ok((0, candidates))
     }
 }
@@ -89,7 +97,11 @@ impl Shell {
     }
 
     pub fn run(mut self) {
-        let mut editor = match Editor::new() {
+        let config = rustyline::Config::builder()
+            .completion_type(CompletionType::List)
+            .build();
+
+        let mut editor = match Editor::with_config(config) {
             Ok(rl) => rl,
             Err(e) => panic!("Error creating editor: {e}"),
         };
