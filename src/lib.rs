@@ -115,7 +115,11 @@ impl Shell {
         };
 
         match fs::canonicalize(&dest) {
-            Ok(p) if p.is_dir() => self.curr_dir = p,
+            Ok(p) if p.is_dir() => {
+                std::env::set_current_dir(&p)
+                    .expect("Error while updating the current process dir");
+                self.curr_dir = p;
+            }
             _ => eprintln!("cd: {}: No such file or directory", dest.display()),
         }
     }

@@ -1,5 +1,5 @@
 use rustyline::Helper;
-use rustyline::completion::{Completer, Pair};
+use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
@@ -8,11 +8,15 @@ use std::fs;
 
 pub struct ShellHelper {
     builtins: &'static [&'static str],
+    file_completer: FilenameCompleter,
 }
 
 impl ShellHelper {
     pub fn new(builtins: &'static [&'static str]) -> ShellHelper {
-        ShellHelper { builtins }
+        ShellHelper {
+            builtins,
+            file_completer: FilenameCompleter::new(),
+        }
     }
 
     fn find_candidates(&self, prefix: &str) -> Vec<Pair> {
@@ -61,9 +65,28 @@ impl Completer for ShellHelper {
         &self,
         line: &str,
         pos: usize,
-        _ctx: &rustyline::Context<'_>,
+        ctx: &rustyline::Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Pair>)> {
         let prefix = &line[..pos];
+
+        let is_first_word = prefix.trim_start().find(' ').is_none();
+
+        if !is_first_word {
+            let (pos, pairs) = match self.file_completer.complete(line, pos, ctx) {
+                Ok(candidates) => candidates,
+                err @ Err(_) => return err,
+            };
+
+            let pairs = pairs
+                .into_iter()
+                .map(|pair| Pair {
+                    display: pair.display + " ",
+                    replacement: pair.replacement + " ",
+                })
+                .collect();
+
+            return Ok((pos, pairs));
+        }
 
         let candidates = self.find_candidates(prefix);
         Ok((0, candidates))
