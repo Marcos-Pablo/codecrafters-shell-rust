@@ -62,7 +62,7 @@ impl Shell {
             match command.name.as_str() {
                 "exit" => std::process::exit(0),
                 "cd" => self.cd_cmd(&command),
-                "echo" | "type" | "pwd" => {
+                "echo" | "type" | "pwd" | "complete" => {
                     let (stdout, stderr) = match builtin::open_builtin_redirects(&command) {
                         Ok(pair) => pair,
                         Err(err) => {
@@ -76,6 +76,7 @@ impl Shell {
                         "echo" => echo_cmd(&command, &mut output),
                         "type" => type_cmd(&command, &mut output),
                         "pwd" => self.pwd_cmd(&mut output),
+                        "complete" => self.complete_cmd(&mut output, &command),
                         _ => unreachable!(),
                     }
                 }
@@ -122,6 +123,26 @@ impl Shell {
             }
             _ => eprintln!("cd: {}: No such file or directory", dest.display()),
         }
+    }
+
+    fn complete_cmd(&self, output: &mut Output, command: &ShellCommand) {
+        let Some(_flag) = command.args.get(0) else {
+            writeln!(output.stdout, "usage: complete -p <command>")
+                .expect("Error writing to stdout");
+            return;
+        };
+
+        let Some(target) = command.args.get(1) else {
+            writeln!(output.stdout, "usage: complete -p <command>")
+                .expect("Error writing to stdout");
+            return;
+        };
+
+        writeln!(
+            output.stdout,
+            "complete: {target}: no completion specification",
+        )
+        .expect("Error writing to stdout");
     }
 }
 
