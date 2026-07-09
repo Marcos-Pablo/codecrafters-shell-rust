@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -18,11 +19,15 @@ mod parser;
 
 pub struct Shell {
     curr_dir: PathBuf,
+    completions: HashMap<String, String>,
 }
 
 impl Shell {
     pub fn new(curr_dir: PathBuf) -> Shell {
-        Shell { curr_dir }
+        Shell {
+            curr_dir,
+            completions: HashMap::new(),
+        }
     }
 
     pub fn run(mut self) {
@@ -125,24 +130,56 @@ impl Shell {
         }
     }
 
-    fn complete_cmd(&self, output: &mut Output, command: &ShellCommand) {
-        let Some(_flag) = command.args.get(0) else {
-            writeln!(output.stdout, "usage: complete -p <command>")
-                .expect("Error writing to stdout");
+    fn complete_cmd(&mut self, output: &mut Output, command: &ShellCommand) {
+        let Some(flag) = command.args.get(0) else {
+            writeln!(output.stdout, "The flag is required").expect("Error writing to stdout");
             return;
         };
 
+        match flag.as_str() {
+            "-C" => self.register_completion(output, command),
+            "-p" => self.get_completion(output, command),
+            _ => {
+                writeln!(output.stdout, "Invalid flag").expect("Error writing to stdout");
+            }
+        }
+    }
+
+    fn register_completion(&mut self, output: &mut Output, command: &ShellCommand) {
+        let path = command.args.get(1);
+        let target = command.args.get(2);
+
+        if path.is_none() || target.is_none() {
+            writeln!(output.stdout, "usage: complete -C <path> <command>")
+                .expect("Error writing to stdout");
+            return;
+        }
+
+        let path = path.unwrap();
+        let target = target.unwrap();
+
+        let completion = format!("complete -C '{path}' {target}");
+
+        self.completions.insert(target.clone(), completion);
+    }
+
+    fn get_completion(&self, output: &mut Output, command: &ShellCommand) {
         let Some(target) = command.args.get(1) else {
             writeln!(output.stdout, "usage: complete -p <command>")
                 .expect("Error writing to stdout");
             return;
         };
 
-        writeln!(
-            output.stdout,
-            "complete: {target}: no completion specification",
-        )
-        .expect("Error writing to stdout");
+        match self.completions.get(target) {
+            Some(completion) => {
+                writeln!(output.stdout, "{completion}").expect("Error writing to stdout")
+            }
+            None => writeln!(
+                output.stdout,
+                "complete: {target}: no completion specification",
+            )
+            .expect("Error writing to stdout"),
+        }
     }
 }
 
