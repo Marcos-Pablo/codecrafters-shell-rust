@@ -3,12 +3,16 @@ use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
+use std::collections::HashMap;
 use std::env;
 use std::fs;
+
+use crate::external::{command_path, ext_command_output};
 
 pub struct ShellHelper {
     builtins: &'static [&'static str],
     file_completer: FilenameCompleter,
+    prog_completions: HashMap<String, String>,
 }
 
 impl ShellHelper {
@@ -16,6 +20,7 @@ impl ShellHelper {
         ShellHelper {
             builtins,
             file_completer: FilenameCompleter::new(),
+            prog_completions: HashMap::new(),
         }
     }
 
@@ -56,6 +61,14 @@ impl ShellHelper {
         candidates.dedup_by(|a, b| a.display == b.display);
         candidates
     }
+
+    pub fn register_ext_completion(&mut self, target: String, path: String) {
+        self.prog_completions.insert(target, path);
+    }
+
+    pub fn get_ext_completion(&self, target: &str) -> Option<&str> {
+        return self.prog_completions.get(target).map(|s| s.as_str());
+    }
 }
 
 impl Completer for ShellHelper {
@@ -67,17 +80,36 @@ impl Completer for ShellHelper {
         pos: usize,
         ctx: &rustyline::Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Pair>)> {
-        let prefix = &line[..pos];
-
-        let is_first_word = prefix.trim_start().find(' ').is_none();
+        let &start = &line[..pos].rfind(' ').map(|i| i + 1).unwrap_or(0);
+        let prefix = &line[start..pos];
+        let trimmed = &line[..pos].trim_start();
+        let is_first_word = trimmed.find(' ').is_none();
 
         if !is_first_word {
-            let (pos, pairs) = match self.file_completer.complete(line, pos, ctx) {
+            let cmd_end = trimmed.find(' ').unwrap_or(trimmed.len());
+            let cmd_name = &trimmed[..cmd_end];
+
+            if let Some(path) = self.get_ext_completion(cmd_name) {
+                if let Some(path_buf) = command_path(path) {
+                    let output = ext_command_output(path_buf)?;
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let candidates = stdout
+                        .lines()
+                        .map(|line| Pair {
+                            display: line.to_string(),
+                            replacement: line.to_string() + " ",
+                        })
+                        .collect();
+                    return Ok((start, candidates));
+                }
+            };
+
+            let (start, candidates) = match self.file_completer.complete(line, pos, ctx) {
                 Ok(candidates) => candidates,
                 err @ Err(_) => return err,
             };
 
-            let pairs = pairs
+            let candidates = candidates
                 .into_iter()
                 .map(|pair| {
                     let sufix = if pair.replacement.ends_with("/") {
@@ -95,11 +127,11 @@ impl Completer for ShellHelper {
                 })
                 .collect();
 
-            return Ok((pos, pairs));
+            return Ok((start, candidates));
         }
 
         let candidates = self.find_candidates(prefix);
-        Ok((0, candidates))
+        Ok((start, candidates))
     }
 }
 

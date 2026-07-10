@@ -1,15 +1,13 @@
-use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 
 use rustyline::Editor;
 use rustyline::config::CompletionType;
-use which::which;
 
 use crate::builtin::{Output, echo_cmd, type_cmd};
 use crate::completer::ShellHelper;
-use crate::external::execute_command;
+use crate::external::{command_path, execute_ext_command};
 use crate::parser::{Redirect, ShellCommand};
 
 mod builtin;
@@ -19,15 +17,11 @@ mod parser;
 
 pub struct Shell {
     curr_dir: PathBuf,
-    completions: HashMap<String, String>,
 }
 
 impl Shell {
     pub fn new(curr_dir: PathBuf) -> Shell {
-        Shell {
-            curr_dir,
-            completions: HashMap::new(),
-        }
+        Shell { curr_dir }
     }
 
     pub fn run(mut self) {
@@ -81,12 +75,16 @@ impl Shell {
                         "echo" => echo_cmd(&command, &mut output),
                         "type" => type_cmd(&command, &mut output),
                         "pwd" => self.pwd_cmd(&mut output),
-                        "complete" => self.complete_cmd(&mut output, &command),
+                        "complete" => self.complete_cmd(
+                            &mut output,
+                            &command,
+                            editor.helper_mut().expect("No helper set"),
+                        ),
                         _ => unreachable!(),
                     }
                 }
                 cmd if let Some(exec_path) = command_path(cmd) => {
-                    execute_command(exec_path, &command);
+                    execute_ext_command(exec_path, &command);
                 }
                 _ => println!("{}: command not found", command.name),
             }
@@ -130,22 +128,32 @@ impl Shell {
         }
     }
 
-    fn complete_cmd(&mut self, output: &mut Output, command: &ShellCommand) {
+    fn complete_cmd(
+        &mut self,
+        output: &mut Output,
+        command: &ShellCommand,
+        helper: &mut ShellHelper,
+    ) {
         let Some(flag) = command.args.get(0) else {
             writeln!(output.stdout, "The flag is required").expect("Error writing to stdout");
             return;
         };
 
         match flag.as_str() {
-            "-C" => self.register_completion(output, command),
-            "-p" => self.get_completion(output, command),
+            "-C" => self.register_completion(output, command, helper),
+            "-p" => self.get_completion(output, command, helper),
             _ => {
                 writeln!(output.stdout, "Invalid flag").expect("Error writing to stdout");
             }
         }
     }
 
-    fn register_completion(&mut self, output: &mut Output, command: &ShellCommand) {
+    fn register_completion(
+        &mut self,
+        output: &mut Output,
+        command: &ShellCommand,
+        helper: &mut ShellHelper,
+    ) {
         let path = command.args.get(1);
         let target = command.args.get(2);
 
@@ -158,20 +166,24 @@ impl Shell {
         let path = path.unwrap();
         let target = target.unwrap();
 
-        let completion = format!("complete -C '{path}' {target}");
-
-        self.completions.insert(target.clone(), completion);
+        helper.register_ext_completion(target.to_string(), path.to_string());
     }
 
-    fn get_completion(&self, output: &mut Output, command: &ShellCommand) {
+    fn get_completion(
+        &self,
+        output: &mut Output,
+        command: &ShellCommand,
+        helper: &mut ShellHelper,
+    ) {
         let Some(target) = command.args.get(1) else {
             writeln!(output.stdout, "usage: complete -p <command>")
                 .expect("Error writing to stdout");
             return;
         };
 
-        match self.completions.get(target) {
-            Some(completion) => {
+        match helper.get_ext_completion(target) {
+            Some(path) => {
+                let completion = format!("complete -C '{path}' {target}");
                 writeln!(output.stdout, "{completion}").expect("Error writing to stdout")
             }
             None => writeln!(
@@ -181,10 +193,6 @@ impl Shell {
             .expect("Error writing to stdout"),
         }
     }
-}
-
-fn command_path(cmd: &str) -> Option<PathBuf> {
-    which(cmd).ok()
 }
 
 fn open_file_redirects(redirect: &Redirect) -> std::io::Result<std::fs::File> {

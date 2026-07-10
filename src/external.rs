@@ -1,11 +1,13 @@
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::io;
 use std::os::unix::process::CommandExt;
+use std::path::PathBuf;
+use std::process::{Command, Output, Stdio};
+use which::which;
 
 use crate::open_file_redirects;
 use crate::parser::{Redirect, ShellCommand};
 
-pub fn execute_command(exec_path: PathBuf, command: &ShellCommand) {
+pub fn execute_ext_command(exec_path: PathBuf, command: &ShellCommand) {
     let mut extern_cmd = Command::new(&exec_path);
     extern_cmd.arg0(&command.name);
     extern_cmd.args(&command.args);
@@ -33,4 +35,13 @@ pub fn execute_command(exec_path: PathBuf, command: &ShellCommand) {
         Ok(_) => (),
         Err(e) => eprintln!("Failed to execute command: {e}"),
     }
+}
+
+pub fn command_path(cmd: &str) -> Option<PathBuf> {
+    which(cmd).ok()
+}
+
+pub fn ext_command_output(exec_path: PathBuf) -> io::Result<Output> {
+    let mut extern_cmd = Command::new(&exec_path);
+    extern_cmd.output()
 }
