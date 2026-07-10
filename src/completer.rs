@@ -91,7 +91,14 @@ impl Completer for ShellHelper {
 
             if let Some(path) = self.get_ext_completion(cmd_name) {
                 if let Some(path_buf) = command_path(path) {
-                    let output = ext_command_output(path_buf)?;
+                    let mut args = vec![cmd_name, prefix];
+
+                    if cmd_end < start {
+                        let text_between = &line[cmd_end..start];
+                        args.extend(text_between.split_whitespace());
+                    }
+
+                    let output = ext_command_output(path_buf, &args)?;
                     let stdout = String::from_utf8_lossy(&output.stdout);
                     let candidates = stdout
                         .lines()

@@ -41,7 +41,8 @@ pub fn command_path(cmd: &str) -> Option<PathBuf> {
     which(cmd).ok()
 }
 
-pub fn ext_command_output(exec_path: PathBuf) -> io::Result<Output> {
+pub fn ext_command_output(exec_path: PathBuf, args: &[&str]) -> io::Result<Output> {
     let mut extern_cmd = Command::new(&exec_path);
+    extern_cmd.args(args);
     extern_cmd.output()
 }
