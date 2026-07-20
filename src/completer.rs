@@ -91,14 +91,14 @@ impl Completer for ShellHelper {
 
             if let Some(path) = self.get_ext_completion(cmd_name) {
                 if let Some(path_buf) = command_path(path) {
-                    let mut args = vec![cmd_name, prefix];
+                    // `complete -C` contract: the completer is invoked with
+                    // $1 = command name, $2 = word being completed,
+                    // $3 = word preceding the word being completed
+                    let prev_word = line[..start].split_whitespace().last().unwrap_or("");
+                    let args = vec![cmd_name, prefix, prev_word];
+
                     let comp_point = pos.to_string();
                     let envs = [("COMP_LINE", line), ("COMP_POINT", comp_point.as_str())];
-
-                    if cmd_end < start {
-                        let text_between = &line[cmd_end..start];
-                        args.extend(text_between.split_whitespace());
-                    }
 
                     let output = ext_command_output(path_buf, &args, &envs)?;
                     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -110,6 +110,7 @@ impl Completer for ShellHelper {
                             replacement: line.to_string() + " ",
                         })
                         .collect();
+
                     return Ok((start, candidates));
                 }
             };
