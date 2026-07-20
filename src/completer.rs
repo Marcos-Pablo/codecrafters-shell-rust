@@ -69,6 +69,10 @@ impl ShellHelper {
     pub fn get_ext_completion(&self, target: &str) -> Option<&str> {
         return self.prog_completions.get(target).map(|s| s.as_str());
     }
+
+    pub fn remove_ext_completion(&mut self, target: &String) {
+        self.prog_completions.remove(target);
+    }
 }
 
 impl Completer for ShellHelper {

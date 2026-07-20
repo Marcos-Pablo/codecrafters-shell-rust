@@ -142,6 +142,7 @@ impl Shell {
         match flag.as_str() {
             "-C" => self.register_completion(output, command, helper),
             "-p" => self.get_completion(output, command, helper),
+            "-r" => self.remove_completion(output, command, helper),
             _ => {
                 writeln!(output.stdout, "Invalid flag").expect("Error writing to stdout");
             }
@@ -192,6 +193,21 @@ impl Shell {
             )
             .expect("Error writing to stdout"),
         }
+    }
+
+    fn remove_completion(
+        &self,
+        output: &mut Output,
+        command: &ShellCommand,
+        helper: &mut ShellHelper,
+    ) {
+        let Some(target) = command.args.get(1) else {
+            writeln!(output.stdout, "usage: complete -p <command>")
+                .expect("Error writing to stdout");
+            return;
+        };
+
+        helper.remove_ext_completion(target);
     }
 }
 
