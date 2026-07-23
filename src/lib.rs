@@ -61,6 +61,7 @@ impl Shell {
             match command.name.as_str() {
                 "exit" => std::process::exit(0),
                 "cd" => self.cd_cmd(&command),
+                "jobs" => (),
                 "echo" | "type" | "pwd" | "complete" => {
                     let (stdout, stderr) = match builtin::open_builtin_redirects(&command) {
                         Ok(pair) => pair,
