@@ -7,8 +7,8 @@ use rustyline::config::CompletionType;
 
 use crate::builtin::{Output, echo_cmd, type_cmd};
 use crate::completer::ShellHelper;
-use crate::external::{command_path, execute_ext_command};
-use crate::parser::{Redirect, ShellCommand};
+use crate::external::{build_command, command_path, execute_ext_command_foreground};
+use crate::parser::{ExecutionMode, Redirect, ShellCommand};
 
 mod builtin;
 mod completer;
@@ -17,11 +17,21 @@ mod parser;
 
 pub struct Shell {
     curr_dir: PathBuf,
+    jobs: Vec<Job>,
+}
+
+struct Job {
+    id: u32,
+    child: std::process::Child,
+    command: String,
 }
 
 impl Shell {
     pub fn new(curr_dir: PathBuf) -> Shell {
-        Shell { curr_dir }
+        Shell {
+            curr_dir,
+            jobs: Vec::new(),
+        }
     }
 
     pub fn run(mut self) {
@@ -84,12 +94,31 @@ impl Shell {
                         _ => unreachable!(),
                     }
                 }
-                cmd if let Some(exec_path) = command_path(cmd) => {
-                    execute_ext_command(exec_path, &command);
+                cmd_name if let Some(exec_path) = command_path(cmd_name) => {
+                    match command.exec_mode {
+                        ExecutionMode::Foreground => {
+                            execute_ext_command_foreground(exec_path, &command);
+                        }
+                        ExecutionMode::Background => {
+                            self.execute_ext_command_background(exec_path, &command);
+                        }
+                    }
                 }
                 _ => println!("{}: command not found", command.name),
             }
         }
+    }
+
+    pub fn get_next_id(&self) -> u32 {
+        let mut id = 1;
+        loop {
+            let available = self.jobs.iter().all(|job| job.id != id);
+            if available {
+                break;
+            }
+            id += 1;
+        }
+        id
     }
 
     fn pwd_cmd(&self, output: &mut Output) {
@@ -209,6 +238,24 @@ impl Shell {
         };
 
         helper.remove_ext_completion(target);
+    }
+
+    fn execute_ext_command_background(&mut self, exec_path: PathBuf, command: &ShellCommand) {
+        let mut extern_cmd = build_command(exec_path, command);
+        match extern_cmd.spawn() {
+            Ok(child) => {
+                let id = self.get_next_id();
+                println!("[{id}] {}", child.id());
+                let cmt_str = command.to_string();
+                let job = Job {
+                    id,
+                    child,
+                    command: cmt_str,
+                };
+                self.jobs.push(job);
+            }
+            Err(e) => eprintln!("Failed to spawn background task: {e}"),
+        };
     }
 }
 

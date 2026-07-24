@@ -7,7 +7,15 @@ use which::which;
 use crate::open_file_redirects;
 use crate::parser::{Redirect, ShellCommand};
 
-pub fn execute_ext_command(exec_path: PathBuf, command: &ShellCommand) {
+pub fn execute_ext_command_foreground(exec_path: PathBuf, command: &ShellCommand) {
+    let mut extern_cmd = build_command(exec_path, command);
+    match extern_cmd.status() {
+        Ok(_) => (),
+        Err(e) => eprintln!("Failed to execute command: {e}"),
+    }
+}
+
+pub fn build_command(exec_path: PathBuf, command: &ShellCommand) -> Command {
     let mut extern_cmd = Command::new(&exec_path);
     extern_cmd.arg0(&command.name);
     extern_cmd.args(&command.args);
@@ -17,7 +25,7 @@ pub fn execute_ext_command(exec_path: PathBuf, command: &ShellCommand) {
             Ok(f) => f,
             Err(e) => {
                 eprintln!("{e}");
-                return;
+                return extern_cmd;
             }
         };
 
@@ -31,12 +39,8 @@ pub fn execute_ext_command(exec_path: PathBuf, command: &ShellCommand) {
         }
     }
 
-    match extern_cmd.status() {
-        Ok(_) => (),
-        Err(e) => eprintln!("Failed to execute command: {e}"),
-    }
+    extern_cmd
 }
-
 pub fn command_path(cmd: &str) -> Option<PathBuf> {
     which(cmd).ok()
 }
