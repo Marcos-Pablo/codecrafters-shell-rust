@@ -278,7 +278,12 @@ impl Shell {
 
     fn jobs_cmd(&self, output: &mut Output) {
         for (i, job) in self.jobs.iter().enumerate() {
-            let marker = if i == self.jobs.len() - 1 { "+" } else { "" };
+            let marker = match i {
+                i if i == self.jobs.len() - 1 => "+",
+                i if i == self.jobs.len() - 2 => "-",
+                _ => " ",
+            };
+
             writeln!(
                 output.stdout,
                 "[{}]{marker} {} {}",
