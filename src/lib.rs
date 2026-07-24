@@ -24,6 +24,23 @@ struct Job {
     id: u32,
     child: std::process::Child,
     command: String,
+    status: JobStatus,
+}
+
+enum JobStatus {
+    Running,
+    Stopped,
+    Completed,
+}
+
+impl JobStatus {
+    fn as_padded_str(&self) -> &'static str {
+        match self {
+            JobStatus::Running => "Running                 ",
+            JobStatus::Stopped => "Stopped                 ",
+            JobStatus::Completed => "Completed               ",
+        }
+    }
 }
 
 impl Shell {
@@ -71,8 +88,7 @@ impl Shell {
             match command.name.as_str() {
                 "exit" => std::process::exit(0),
                 "cd" => self.cd_cmd(&command),
-                "jobs" => (),
-                "echo" | "type" | "pwd" | "complete" => {
+                "echo" | "type" | "pwd" | "complete" | "jobs" => {
                     let (stdout, stderr) = match builtin::open_builtin_redirects(&command) {
                         Ok(pair) => pair,
                         Err(err) => {
@@ -91,6 +107,7 @@ impl Shell {
                             &command,
                             editor.helper_mut().expect("No helper set"),
                         ),
+                        "jobs" => self.jobs_cmd(&mut output),
                         _ => unreachable!(),
                     }
                 }
@@ -251,11 +268,26 @@ impl Shell {
                     id,
                     child,
                     command: cmt_str,
+                    status: JobStatus::Running,
                 };
                 self.jobs.push(job);
             }
             Err(e) => eprintln!("Failed to spawn background task: {e}"),
         };
+    }
+
+    fn jobs_cmd(&self, output: &mut Output) {
+        for (i, job) in self.jobs.iter().enumerate() {
+            let marker = if i == self.jobs.len() - 1 { "+" } else { "" };
+            writeln!(
+                output.stdout,
+                "[{}]{marker} {} {}",
+                job.id,
+                job.status.as_padded_str(),
+                job.command
+            )
+            .expect("Error writing to stdout");
+        }
     }
 }
 
