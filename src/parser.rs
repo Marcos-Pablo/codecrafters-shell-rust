@@ -82,13 +82,13 @@ impl ShellCommand {
             }
         }
 
-        match self.exec_mode {
-            ExecutionMode::Foreground => {}
-            ExecutionMode::Background => {
-                result.push(' ');
-                result.push('&');
-            }
-        }
+        // match self.exec_mode {
+        //     ExecutionMode::Foreground => {}
+        //     ExecutionMode::Background => {
+        //         result.push(' ');
+        //         result.push('&');
+        //     }
+        // }
         result
     }
 }

@@ -27,6 +27,7 @@ struct Job {
     status: JobStatus,
 }
 
+#[derive(PartialEq, Eq)]
 enum JobStatus {
     Running,
     Done,
@@ -275,7 +276,6 @@ impl Shell {
     }
 
     fn jobs_cmd(&mut self, output: &mut Output) {
-        let mut ids_to_remove = Vec::new();
         let last_index = self.jobs.len() - 1;
 
         for (i, job) in self.jobs.iter_mut().enumerate() {
@@ -286,10 +286,7 @@ impl Shell {
             };
 
             match job.child.try_wait() {
-                Ok(Some(_)) | Err(_) => {
-                    ids_to_remove.push(job.id);
-                    job.status = JobStatus::Done;
-                }
+                Ok(Some(_)) | Err(_) => job.status = JobStatus::Done,
                 Ok(None) => (),
             }
 
@@ -302,6 +299,7 @@ impl Shell {
             )
             .expect("Error writing to stdout");
         }
+        self.jobs.retain(|job| job.status != JobStatus::Done);
     }
 }
 
