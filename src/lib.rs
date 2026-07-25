@@ -65,6 +65,7 @@ impl Shell {
         editor.set_helper(Some(helper));
 
         loop {
+            self.reap_jobs();
             let input = editor.readline("$ ").expect("Error reading input");
 
             let Ok((remaining, tokens)) = parser::tokenize(&input.trim()) else {
@@ -286,8 +287,8 @@ impl Shell {
             };
 
             match job.child.try_wait() {
-                Ok(Some(_)) | Err(_) => job.status = JobStatus::Done,
-                Ok(None) => (),
+                Ok(Some(_)) => job.status = JobStatus::Done,
+                Ok(None) | Err(_) => (),
             }
 
             writeln!(
@@ -298,6 +299,30 @@ impl Shell {
                 job.command
             )
             .expect("Error writing to stdout");
+        }
+        self.jobs.retain(|job| job.status != JobStatus::Done);
+    }
+
+    fn reap_jobs(&mut self) {
+        let last_index = self.jobs.len() - 1;
+        for (i, job) in self.jobs.iter_mut().enumerate() {
+            match job.child.try_wait() {
+                Ok(Some(_)) => {
+                    job.status = JobStatus::Done;
+                    let marker = match i {
+                        i if i == last_index => "+",
+                        i if i == last_index - 1 => "-",
+                        _ => " ",
+                    };
+                    println!(
+                        "[{}]{marker}  {} {}",
+                        job.id,
+                        job.status.as_padded_str(),
+                        job.command
+                    );
+                }
+                Ok(None) | Err(_) => (),
+            }
         }
         self.jobs.retain(|job| job.status != JobStatus::Done);
     }
