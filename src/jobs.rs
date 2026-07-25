@@ -77,9 +77,9 @@ impl Jobs {
 
     fn format_line(&self, job: &Job, marker: &str) -> String {
         format!(
-            "[{}]{marker}  {} {}",
+            "[{}]{marker}  {:>24} {}",
             job.id,
-            job.status.as_padded_str(),
+            job.status.as_str(),
             job.command
         )
     }
@@ -103,10 +103,10 @@ enum JobStatus {
 }
 
 impl JobStatus {
-    fn as_padded_str(&self) -> &'static str {
+    fn as_str(&self) -> &'static str {
         match self {
-            JobStatus::Running => "Running                 ",
-            JobStatus::Done => "Done                    ",
+            JobStatus::Running => "Running",
+            JobStatus::Done => "Done",
         }
     }
 }
