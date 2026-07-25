@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
 use which::which;
 
+use crate::command::{Redirect, ShellCommand};
 use crate::open_file_redirects;
-use crate::parser::{Redirect, ShellCommand};
 
 pub fn execute_ext_command_foreground(exec_path: PathBuf, command: &ShellCommand) {
     let mut extern_cmd = build_command(exec_path, command);

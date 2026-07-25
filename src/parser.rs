@@ -1,108 +1,13 @@
-use crate::parser::{core::Parser, tokens::tokens};
-
 mod core;
 mod primitives;
-mod tokens;
+mod tokenizer;
 
-#[derive(Debug)]
-pub struct Token {
-    pub parts: Vec<TokenPart>,
-}
+pub use tokenizer::tokenize;
 
-#[derive(Debug)]
-pub enum TokenPart {
-    Unquoted(String),
-    SingleQuoted(String),
-    DoubleQuoted(String),
-}
-
-impl TokenPart {
-    pub fn content(&self) -> &str {
-        match self {
-            TokenPart::Unquoted(s) => s,
-            TokenPart::SingleQuoted(s) => s,
-            TokenPart::DoubleQuoted(s) => s,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct ShellCommand {
-    pub name: String,
-    pub args: Vec<String>,
-    pub redirect: Option<Redirect>,
-    pub exec_mode: ExecutionMode,
-}
-
-#[derive(Debug)]
-pub enum Redirect {
-    Stdout(String),
-    Stderr(String),
-    AppendStdout(String),
-    AppendStderr(String),
-}
-
-#[derive(Debug)]
-pub enum ExecutionMode {
-    Foreground,
-    Background,
-}
-
-impl ShellCommand {
-    pub fn to_string(&self) -> String {
-        let mut result = String::new();
-        result.push_str(&self.name);
-        for arg in &self.args {
-            result.push(' ');
-            result.push_str(arg);
-        }
-        if let Some(ref redirect) = self.redirect {
-            result.push(' ');
-            match redirect {
-                Redirect::Stdout(file) => {
-                    result.push_str(">");
-                    result.push(' ');
-                    result.push_str(file);
-                }
-                Redirect::Stderr(file) => {
-                    result.push_str("2>");
-                    result.push(' ');
-                    result.push_str(file);
-                }
-                Redirect::AppendStdout(file) => {
-                    result.push_str(">>");
-                    result.push(' ');
-                    result.push_str(file);
-                }
-                Redirect::AppendStderr(file) => {
-                    result.push_str("2>>");
-                    result.push(' ');
-                    result.push_str(file);
-                }
-            }
-        }
-
-        result
-    }
-}
-
-impl Token {
-    pub fn to_string(&self) -> String {
-        let mut result = String::with_capacity(self.parts.iter().map(|s| s.content().len()).sum());
-
-        for part in &self.parts {
-            result.push_str(part.content());
-        }
-
-        result
-    }
-}
-
-pub fn tokenize(input: &str) -> Result<(&str, Vec<Token>), &str> {
-    let parser = tokens();
-
-    parser.parse(input)
-}
+use crate::{
+    command::{ExecutionMode, Redirect, ShellCommand},
+    token::{Token, TokenPart},
+};
 
 pub fn parse_command(tokens: &[Token]) -> Result<ShellCommand, String> {
     let mut cmd_name = String::new();

@@ -1,13 +1,20 @@
-use crate::parser::primitives::{
-    left, map, match_double_quote, match_single_quote, match_until_char,
-    match_until_pred_with_escape, one_or_more, whitespace, zero_or_more,
-};
-use crate::parser::{Token, TokenPart};
-
 use super::core::Parser;
 use super::primitives::right;
+use crate::{
+    parser::primitives::{
+        left, map, match_double_quote, match_single_quote, match_until_char,
+        match_until_pred_with_escape, one_or_more, whitespace, zero_or_more,
+    },
+    token::{Token, TokenPart},
+};
 
-pub fn tokens<'a>() -> impl Parser<'a, Vec<Token>> {
+pub fn tokenize(input: &str) -> Result<(&str, Vec<Token>), &str> {
+    let parser = tokens();
+
+    parser.parse(input)
+}
+
+fn tokens<'a>() -> impl Parser<'a, Vec<Token>> {
     one_or_more(token())
 }
 

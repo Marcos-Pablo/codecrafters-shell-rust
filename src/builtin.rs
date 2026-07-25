@@ -1,8 +1,8 @@
 use std::io;
 use std::io::Write;
 
+use crate::command::{Redirect, ShellCommand};
 use crate::open_file_redirects;
-use crate::parser::{Redirect, ShellCommand};
 
 pub struct Output {
     pub stdout: Box<dyn Write>,

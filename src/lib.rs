@@ -6,16 +6,18 @@ use rustyline::Editor;
 use rustyline::config::CompletionType;
 
 use crate::builtin::{Output, echo_cmd, type_cmd};
+use crate::command::{ExecutionMode, Redirect, ShellCommand};
 use crate::completer::ShellHelper;
 use crate::external::{build_command, command_path, execute_ext_command_foreground};
 use crate::jobs::Jobs;
-use crate::parser::{ExecutionMode, Redirect, ShellCommand};
 
 mod builtin;
+mod command;
 mod completer;
 mod external;
 mod jobs;
 mod parser;
+mod token;
 
 pub struct Shell {
     curr_dir: PathBuf,
