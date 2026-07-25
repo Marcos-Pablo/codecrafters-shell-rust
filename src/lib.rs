@@ -29,16 +29,14 @@ struct Job {
 
 enum JobStatus {
     Running,
-    Stopped,
-    Completed,
+    Done,
 }
 
 impl JobStatus {
     fn as_padded_str(&self) -> &'static str {
         match self {
             JobStatus::Running => "Running                 ",
-            JobStatus::Stopped => "Stopped                 ",
-            JobStatus::Completed => "Completed               ",
+            JobStatus::Done => "Done                    ",
         }
     }
 }
@@ -276,17 +274,28 @@ impl Shell {
         };
     }
 
-    fn jobs_cmd(&self, output: &mut Output) {
-        for (i, job) in self.jobs.iter().enumerate() {
+    fn jobs_cmd(&mut self, output: &mut Output) {
+        let mut ids_to_remove = Vec::new();
+        let last_index = self.jobs.len() - 1;
+
+        for (i, job) in self.jobs.iter_mut().enumerate() {
             let marker = match i {
-                i if i == self.jobs.len() - 1 => "+",
-                i if i == self.jobs.len() - 2 => "-",
+                i if i == last_index => "+",
+                i if i == last_index - 1 => "-",
                 _ => " ",
             };
 
+            match job.child.try_wait() {
+                Ok(Some(_)) | Err(_) => {
+                    ids_to_remove.push(job.id);
+                    job.status = JobStatus::Done;
+                }
+                Ok(None) => (),
+            }
+
             writeln!(
                 output.stdout,
-                "[{}]{marker} {} {}",
+                "[{}]{marker}  {} {}",
                 job.id,
                 job.status.as_padded_str(),
                 job.command
