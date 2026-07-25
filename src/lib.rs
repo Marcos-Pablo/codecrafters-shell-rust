@@ -277,52 +277,58 @@ impl Shell {
     }
 
     fn jobs_cmd(&mut self, output: &mut Output) {
-        let last_index = self.jobs.len().saturating_sub(1);
-        for (i, job) in self.jobs.iter_mut().enumerate() {
-            let marker = match i {
-                i if i == last_index => "+",
-                i if i == last_index - 1 => "-",
-                _ => " ",
-            };
+        self.refresh_jobs();
+        for (i, job) in self.jobs.iter().enumerate() {
+            let marker = self.get_job_marker(i);
+            let job_line = self.format_job_line(job, marker);
 
-            match job.child.try_wait() {
-                Ok(Some(_)) => job.status = JobStatus::Done,
-                Ok(None) | Err(_) => (),
-            }
-
-            writeln!(
-                output.stdout,
-                "[{}]{marker}  {} {}",
-                job.id,
-                job.status.as_padded_str(),
-                job.command
-            )
-            .expect("Error writing to stdout");
+            writeln!(output.stdout, "{job_line}").expect("Error writing to stdout");
         }
-        self.jobs.retain(|job| job.status != JobStatus::Done);
+        self.remove_done_jobs();
     }
 
     fn reap_jobs(&mut self) {
-        let last_index = self.jobs.len().saturating_sub(1);
-        for (i, job) in self.jobs.iter_mut().enumerate() {
-            match job.child.try_wait() {
-                Ok(Some(_)) => {
-                    job.status = JobStatus::Done;
-                    let marker = match i {
-                        i if i == last_index => "+",
-                        i if i == last_index - 1 => "-",
-                        _ => " ",
-                    };
-                    println!(
-                        "[{}]{marker}  {} {}",
-                        job.id,
-                        job.status.as_padded_str(),
-                        job.command
-                    );
+        self.refresh_jobs();
+        for (i, job) in self.jobs.iter().enumerate() {
+            match job.status {
+                JobStatus::Done => {
+                    let marker = self.get_job_marker(i);
+                    let job_line = self.format_job_line(job, marker);
+                    println!("{job_line}");
                 }
-                Ok(None) | Err(_) => (),
+                JobStatus::Running => (),
             }
         }
+        self.remove_done_jobs();
+    }
+
+    fn refresh_jobs(&mut self) {
+        self.jobs.iter_mut().for_each(|job| {
+            if let Ok(Some(_)) = job.child.try_wait() {
+                job.status = JobStatus::Done;
+            }
+        });
+    }
+
+    fn get_job_marker(&self, job_index: usize) -> &'static str {
+        let last_index = self.jobs.len().saturating_sub(1);
+        match job_index {
+            i if i == last_index => "+",
+            i if i == last_index - 1 => "-",
+            _ => " ",
+        }
+    }
+
+    fn format_job_line(&self, job: &Job, marker: &str) -> String {
+        format!(
+            "[{}]{marker}  {} {}",
+            job.id,
+            job.status.as_padded_str(),
+            job.command
+        )
+    }
+
+    fn remove_done_jobs(&mut self) {
         self.jobs.retain(|job| job.status != JobStatus::Done);
     }
 }
