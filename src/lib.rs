@@ -8,45 +8,25 @@ use rustyline::config::CompletionType;
 use crate::builtin::{Output, echo_cmd, type_cmd};
 use crate::completer::ShellHelper;
 use crate::external::{build_command, command_path, execute_ext_command_foreground};
+use crate::jobs::Jobs;
 use crate::parser::{ExecutionMode, Redirect, ShellCommand};
 
 mod builtin;
 mod completer;
 mod external;
+mod jobs;
 mod parser;
 
 pub struct Shell {
     curr_dir: PathBuf,
-    jobs: Vec<Job>,
-}
-
-struct Job {
-    id: u32,
-    child: std::process::Child,
-    command: String,
-    status: JobStatus,
-}
-
-#[derive(PartialEq, Eq)]
-enum JobStatus {
-    Running,
-    Done,
-}
-
-impl JobStatus {
-    fn as_padded_str(&self) -> &'static str {
-        match self {
-            JobStatus::Running => "Running                 ",
-            JobStatus::Done => "Done                    ",
-        }
-    }
+    jobs: Jobs,
 }
 
 impl Shell {
     pub fn new(curr_dir: PathBuf) -> Shell {
         Shell {
             curr_dir,
-            jobs: Vec::new(),
+            jobs: Jobs::new(),
         }
     }
 
@@ -65,7 +45,7 @@ impl Shell {
         editor.set_helper(Some(helper));
 
         loop {
-            self.reap_jobs();
+            self.jobs.reap();
             let input = editor.readline("$ ").expect("Error reading input");
 
             let Ok((remaining, tokens)) = parser::tokenize(&input.trim()) else {
@@ -107,7 +87,7 @@ impl Shell {
                             &command,
                             editor.helper_mut().expect("No helper set"),
                         ),
-                        "jobs" => self.jobs_cmd(&mut output),
+                        "jobs" => self.jobs.list(&mut output),
                         _ => unreachable!(),
                     }
                 }
@@ -124,18 +104,6 @@ impl Shell {
                 _ => println!("{}: command not found", command.name),
             }
         }
-    }
-
-    pub fn get_next_id(&self) -> u32 {
-        let mut id = 1;
-        loop {
-            let available = self.jobs.iter().all(|job| job.id != id);
-            if available {
-                break;
-            }
-            id += 1;
-        }
-        id
     }
 
     fn pwd_cmd(&self, output: &mut Output) {
@@ -261,75 +229,13 @@ impl Shell {
         let mut extern_cmd = build_command(exec_path, command);
         match extern_cmd.spawn() {
             Ok(child) => {
-                let id = self.get_next_id();
-                println!("[{id}] {}", child.id());
                 let cmt_str = command.to_string();
-                let job = Job {
-                    id,
-                    child,
-                    command: cmt_str,
-                    status: JobStatus::Running,
-                };
-                self.jobs.push(job);
+                let pid = child.id();
+                let id = self.jobs.add(child, cmt_str);
+                println!("[{id}] {pid}");
             }
             Err(e) => eprintln!("Failed to spawn background task: {e}"),
         };
-    }
-
-    fn jobs_cmd(&mut self, output: &mut Output) {
-        self.refresh_jobs();
-        for (i, job) in self.jobs.iter().enumerate() {
-            let marker = self.get_job_marker(i);
-            let job_line = self.format_job_line(job, marker);
-
-            writeln!(output.stdout, "{job_line}").expect("Error writing to stdout");
-        }
-        self.remove_done_jobs();
-    }
-
-    fn reap_jobs(&mut self) {
-        self.refresh_jobs();
-        for (i, job) in self.jobs.iter().enumerate() {
-            match job.status {
-                JobStatus::Done => {
-                    let marker = self.get_job_marker(i);
-                    let job_line = self.format_job_line(job, marker);
-                    println!("{job_line}");
-                }
-                JobStatus::Running => (),
-            }
-        }
-        self.remove_done_jobs();
-    }
-
-    fn refresh_jobs(&mut self) {
-        self.jobs.iter_mut().for_each(|job| {
-            if let Ok(Some(_)) = job.child.try_wait() {
-                job.status = JobStatus::Done;
-            }
-        });
-    }
-
-    fn get_job_marker(&self, job_index: usize) -> &'static str {
-        let last_index = self.jobs.len().saturating_sub(1);
-        match job_index {
-            i if i == last_index => "+",
-            i if i == last_index - 1 => "-",
-            _ => " ",
-        }
-    }
-
-    fn format_job_line(&self, job: &Job, marker: &str) -> String {
-        format!(
-            "[{}]{marker}  {} {}",
-            job.id,
-            job.status.as_padded_str(),
-            job.command
-        )
-    }
-
-    fn remove_done_jobs(&mut self) {
-        self.jobs.retain(|job| job.status != JobStatus::Done);
     }
 }
 
