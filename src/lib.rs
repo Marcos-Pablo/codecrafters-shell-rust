@@ -277,8 +277,7 @@ impl Shell {
     }
 
     fn jobs_cmd(&mut self, output: &mut Output) {
-        let last_index = self.jobs.len() - 1;
-
+        let last_index = self.jobs.len().saturating_sub(1);
         for (i, job) in self.jobs.iter_mut().enumerate() {
             let marker = match i {
                 i if i == last_index => "+",
@@ -304,7 +303,7 @@ impl Shell {
     }
 
     fn reap_jobs(&mut self) {
-        let last_index = self.jobs.len() - 1;
+        let last_index = self.jobs.len().saturating_sub(1);
         for (i, job) in self.jobs.iter_mut().enumerate() {
             match job.child.try_wait() {
                 Ok(Some(_)) => {
