@@ -6,10 +6,11 @@ use rustyline::Editor;
 use rustyline::config::CompletionType;
 
 use crate::builtin::{Output, echo_cmd, type_cmd};
-use crate::command::{ExecutionMode, Redirect, ShellCommand};
+use crate::command::{Redirect, ShellCommand};
 use crate::completer::ShellHelper;
 use crate::external::{build_command, command_path, execute_ext_command_foreground};
 use crate::jobs::Jobs;
+use crate::pipeline::ExecutionMode;
 
 mod builtin;
 mod command;
@@ -17,6 +18,7 @@ mod completer;
 mod external;
 mod jobs;
 mod parser;
+mod pipeline;
 mod token;
 
 pub struct Shell {
@@ -59,14 +61,15 @@ impl Shell {
                 continue;
             }
 
-            let command = match parser::parse_command(&tokens) {
-                Ok(c) => c,
+            let pipeline = match parser::parse_pipeline(&tokens) {
+                Ok(p) => p,
                 Err(err) => {
                     eprintln!("{err}");
                     continue;
                 }
             };
 
+            let command = &pipeline.commands[0];
             match command.name.as_str() {
                 "exit" => std::process::exit(0),
                 "cd" => self.cd_cmd(&command),
@@ -94,7 +97,7 @@ impl Shell {
                     }
                 }
                 cmd_name if let Some(exec_path) = command_path(cmd_name) => {
-                    match command.exec_mode {
+                    match pipeline.exec_mode {
                         ExecutionMode::Foreground => {
                             execute_ext_command_foreground(exec_path, &command);
                         }

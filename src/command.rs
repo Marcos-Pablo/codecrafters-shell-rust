@@ -7,17 +7,10 @@ pub enum Redirect {
 }
 
 #[derive(Debug)]
-pub enum ExecutionMode {
-    Foreground,
-    Background,
-}
-
-#[derive(Debug)]
 pub struct ShellCommand {
     pub name: String,
     pub args: Vec<String>,
     pub redirect: Option<Redirect>,
-    pub exec_mode: ExecutionMode,
 }
 
 impl ShellCommand {

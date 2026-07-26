@@ -5,16 +5,13 @@ mod tokenizer;
 pub use tokenizer::tokenize;
 
 use crate::{
-    command::{ExecutionMode, Redirect, ShellCommand},
+    command::{Redirect, ShellCommand},
+    pipeline::{ExecutionMode, Pipeline},
     token::{Token, TokenPart},
 };
 
-pub fn parse_command(tokens: &[Token]) -> Result<ShellCommand, String> {
-    let mut cmd_name = String::new();
-    let mut args = vec![];
-    let mut redirect: Option<Redirect> = None;
-    let mut has_parsed_cmd_name = false;
-
+pub fn parse_pipeline(tokens: &[Token]) -> Result<Pipeline, String> {
+    let mut pipeline = Pipeline::new();
     let exec_mode = match tokens.last() {
         Some(token) => match token {
             Token { parts } if parts.len() == 1 => match parts[0] {
@@ -31,7 +28,27 @@ pub fn parse_command(tokens: &[Token]) -> Result<ShellCommand, String> {
         ExecutionMode::Foreground => 0,
     };
 
-    let mut tokens_iter = tokens[..tokens.len() - exec_mode_offset].iter();
+    pipeline.exec_mode = exec_mode;
+
+    for part in tokens[..tokens.len() - exec_mode_offset]
+        .split(|t| matches!(t.parts.as_slice(), [TokenPart::Unquoted(s)] if s == "|"))
+    {
+        let command = match parse_command(part) {
+            Ok(c) => c,
+            Err(err) => return Err(err),
+        };
+        pipeline.add_command(command);
+    }
+
+    Ok(pipeline)
+}
+
+pub fn parse_command(tokens: &[Token]) -> Result<ShellCommand, String> {
+    let mut cmd_name = String::new();
+    let mut args = vec![];
+    let mut redirect: Option<Redirect> = None;
+    let mut has_parsed_cmd_name = false;
+    let mut tokens_iter = tokens.iter();
 
     while let Some(token) = tokens_iter.next() {
         let content = token.to_string();
@@ -68,7 +85,6 @@ pub fn parse_command(tokens: &[Token]) -> Result<ShellCommand, String> {
         name: cmd_name,
         args,
         redirect,
-        exec_mode,
     };
 
     Ok(command)
