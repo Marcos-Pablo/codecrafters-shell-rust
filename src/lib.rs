@@ -8,7 +8,7 @@ use rustyline::config::CompletionType;
 use crate::builtin::{Output, echo_cmd, type_cmd};
 use crate::command::{Redirect, ShellCommand};
 use crate::completer::ShellHelper;
-use crate::external::{build_command, command_path, execute_ext_command_foreground};
+use crate::external::{build_command, command_path, exec_pipeline, execute_ext_command_foreground};
 use crate::jobs::Jobs;
 use crate::pipeline::ExecutionMode;
 
@@ -69,44 +69,50 @@ impl Shell {
                 }
             };
 
-            let command = &pipeline.commands[0];
-            match command.name.as_str() {
-                "exit" => std::process::exit(0),
-                "cd" => self.cd_cmd(&command),
-                "echo" | "type" | "pwd" | "complete" | "jobs" => {
-                    let (stdout, stderr) = match builtin::open_builtin_redirects(&command) {
-                        Ok(pair) => pair,
-                        Err(err) => {
-                            eprintln!("{err}");
-                            continue;
-                        }
-                    };
-                    let mut output = Output::new(stdout, stderr);
-
+            match pipeline.commands.len() {
+                0 => eprintln!("Couldn't parse the input to a valid pipeline of commands"),
+                1 => {
+                    let command = &pipeline.commands[0];
                     match command.name.as_str() {
-                        "echo" => echo_cmd(&command, &mut output),
-                        "type" => type_cmd(&command, &mut output),
-                        "pwd" => self.pwd_cmd(&mut output),
-                        "complete" => self.complete_cmd(
-                            &mut output,
-                            &command,
-                            editor.helper_mut().expect("No helper set"),
-                        ),
-                        "jobs" => self.jobs.list(&mut output),
-                        _ => unreachable!(),
+                        "exit" => std::process::exit(0),
+                        "cd" => self.cd_cmd(&command),
+                        "echo" | "type" | "pwd" | "complete" | "jobs" => {
+                            let (stdout, stderr) = match builtin::open_builtin_redirects(&command) {
+                                Ok(pair) => pair,
+                                Err(err) => {
+                                    eprintln!("{err}");
+                                    continue;
+                                }
+                            };
+                            let mut output = Output::new(stdout, stderr);
+
+                            match command.name.as_str() {
+                                "echo" => echo_cmd(&command, &mut output),
+                                "type" => type_cmd(&command, &mut output),
+                                "pwd" => self.pwd_cmd(&mut output),
+                                "complete" => self.complete_cmd(
+                                    &mut output,
+                                    &command,
+                                    editor.helper_mut().expect("No helper set"),
+                                ),
+                                "jobs" => self.jobs.list(&mut output),
+                                _ => unreachable!(),
+                            }
+                        }
+                        cmd_name if let Some(exec_path) = command_path(cmd_name) => {
+                            match pipeline.exec_mode {
+                                ExecutionMode::Foreground => {
+                                    execute_ext_command_foreground(exec_path, &command);
+                                }
+                                ExecutionMode::Background => {
+                                    self.execute_ext_command_background(exec_path, &command);
+                                }
+                            }
+                        }
+                        _ => println!("{}: command not found", command.name),
                     }
                 }
-                cmd_name if let Some(exec_path) = command_path(cmd_name) => {
-                    match pipeline.exec_mode {
-                        ExecutionMode::Foreground => {
-                            execute_ext_command_foreground(exec_path, &command);
-                        }
-                        ExecutionMode::Background => {
-                            self.execute_ext_command_background(exec_path, &command);
-                        }
-                    }
-                }
-                _ => println!("{}: command not found", command.name),
+                _ => exec_pipeline(pipeline),
             }
         }
     }
