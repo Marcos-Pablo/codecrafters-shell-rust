@@ -6,6 +6,8 @@ use crate::open_file_redirects;
 
 pub const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "complete", "jobs", "cd"];
 
+pub const PIPELINE_BUILTINS: &[&str] = &["echo", "type", "pwd"];
+
 pub struct Output {
     pub stdout: Box<dyn Write>,
     pub _stderr: Box<dyn Write>,
@@ -69,4 +71,8 @@ pub fn open_builtin_redirects(
 
 pub fn is_built_in(cmd_name: &str) -> bool {
     BUILTINS.contains(&cmd_name)
+}
+
+pub fn is_pipeline_built_in(cmd_name: &str) -> bool {
+    PIPELINE_BUILTINS.contains(&cmd_name)
 }
