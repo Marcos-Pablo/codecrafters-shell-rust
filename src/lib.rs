@@ -5,6 +5,7 @@ use std::process::{Child, Stdio};
 
 use rustyline::Editor;
 use rustyline::config::CompletionType;
+use rustyline::history::FileHistory;
 
 use crate::builtin::{Output, echo_cmd, type_cmd};
 use crate::command::{Redirect, ShellCommand};
@@ -25,17 +26,11 @@ mod token;
 pub struct Shell {
     curr_dir: PathBuf,
     jobs: Jobs,
+    editor: Editor<ShellHelper, FileHistory>,
 }
 
 impl Shell {
     pub fn new(curr_dir: PathBuf) -> Shell {
-        Shell {
-            curr_dir,
-            jobs: Jobs::new(),
-        }
-    }
-
-    pub fn run(mut self) {
         let config = rustyline::Config::builder()
             .completion_type(CompletionType::List)
             .build();
@@ -49,9 +44,17 @@ impl Shell {
         let helper = ShellHelper::new(builtins);
         editor.set_helper(Some(helper));
 
+        Shell {
+            curr_dir,
+            jobs: Jobs::new(),
+            editor,
+        }
+    }
+
+    pub fn run(mut self) {
         loop {
             self.jobs.reap();
-            let input = editor.readline("$ ").expect("Error reading input");
+            let input = self.editor.readline("$ ").expect("Error reading input");
 
             let Ok((remaining, tokens)) = parser::tokenize(&input.trim()) else {
                 continue;
@@ -91,11 +94,7 @@ impl Shell {
                                 "echo" => echo_cmd(&command, &mut output),
                                 "type" => type_cmd(&command, &mut output),
                                 "pwd" => self.pwd_cmd(&mut output),
-                                "complete" => self.complete_cmd(
-                                    &mut output,
-                                    &command,
-                                    editor.helper_mut().expect("No helper set"),
-                                ),
+                                "complete" => self.complete_cmd(&mut output, &command),
                                 "jobs" => self.jobs.list(&mut output),
                                 _ => unreachable!(),
                             }
@@ -155,33 +154,23 @@ impl Shell {
         }
     }
 
-    fn complete_cmd(
-        &mut self,
-        output: &mut Output,
-        command: &ShellCommand,
-        helper: &mut ShellHelper,
-    ) {
+    fn complete_cmd(&mut self, output: &mut Output, command: &ShellCommand) {
         let Some(flag) = command.args.get(0) else {
             writeln!(output.stdout, "The flag is required").expect("Error writing to stdout");
             return;
         };
 
         match flag.as_str() {
-            "-C" => self.register_completion(output, command, helper),
-            "-p" => self.get_completion(output, command, helper),
-            "-r" => self.remove_completion(output, command, helper),
+            "-C" => self.register_completion(output, command),
+            "-p" => self.get_completion(output, command),
+            "-r" => self.remove_completion(output, command),
             _ => {
                 writeln!(output.stdout, "Invalid flag").expect("Error writing to stdout");
             }
         }
     }
 
-    fn register_completion(
-        &mut self,
-        output: &mut Output,
-        command: &ShellCommand,
-        helper: &mut ShellHelper,
-    ) {
+    fn register_completion(&mut self, output: &mut Output, command: &ShellCommand) {
         let path = command.args.get(1);
         let target = command.args.get(2);
 
@@ -193,22 +182,19 @@ impl Shell {
 
         let path = path.unwrap();
         let target = target.unwrap();
+        let helper = self.editor.helper_mut().expect("ShellHelper not set");
 
         helper.register_ext_completion(target.to_string(), path.to_string());
     }
 
-    fn get_completion(
-        &self,
-        output: &mut Output,
-        command: &ShellCommand,
-        helper: &mut ShellHelper,
-    ) {
+    fn get_completion(&mut self, output: &mut Output, command: &ShellCommand) {
         let Some(target) = command.args.get(1) else {
             writeln!(output.stdout, "usage: complete -p <command>")
                 .expect("Error writing to stdout");
             return;
         };
 
+        let helper = self.editor.helper_mut().expect("ShellHelper not set");
         match helper.get_ext_completion(target) {
             Some(path) => {
                 let completion = format!("complete -C '{path}' {target}");
@@ -222,18 +208,14 @@ impl Shell {
         }
     }
 
-    fn remove_completion(
-        &self,
-        output: &mut Output,
-        command: &ShellCommand,
-        helper: &mut ShellHelper,
-    ) {
+    fn remove_completion(&mut self, output: &mut Output, command: &ShellCommand) {
         let Some(target) = command.args.get(1) else {
             writeln!(output.stdout, "usage: complete -p <command>")
                 .expect("Error writing to stdout");
             return;
         };
 
+        let helper = self.editor.helper_mut().expect("ShellHelper not set");
         helper.remove_ext_completion(target);
     }
 
