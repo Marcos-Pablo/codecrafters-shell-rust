@@ -1,6 +1,7 @@
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
+use std::process::{Child, Stdio};
 
 use rustyline::Editor;
 use rustyline::config::CompletionType;
@@ -8,9 +9,9 @@ use rustyline::config::CompletionType;
 use crate::builtin::{Output, echo_cmd, type_cmd};
 use crate::command::{Redirect, ShellCommand};
 use crate::completer::ShellHelper;
-use crate::external::{build_command, command_path, exec_pipeline, execute_ext_command_foreground};
+use crate::external::{build_command, command_path, execute_ext_command_foreground};
 use crate::jobs::Jobs;
-use crate::pipeline::ExecutionMode;
+use crate::pipeline::{ExecutionMode, Pipeline};
 
 mod builtin;
 mod command;
@@ -112,7 +113,7 @@ impl Shell {
                         _ => println!("{}: command not found", command.name),
                     }
                 }
-                _ => exec_pipeline(pipeline),
+                _ => self.exec_pipeline(pipeline),
             }
         }
     }
@@ -247,6 +248,58 @@ impl Shell {
             }
             Err(e) => eprintln!("Failed to spawn background task: {e}"),
         };
+    }
+
+    fn exec_pipeline(&self, pipeline: Pipeline) {
+        let mut commands = vec![];
+        let mut children: Vec<Child> = vec![];
+
+        for shell_command in pipeline.commands {
+            let Some(exec_path) = command_path(&shell_command.name) else {
+                eprintln!("{}: command not found", shell_command.name);
+                return;
+            };
+
+            let extern_cmd = build_command(exec_path, &shell_command);
+            commands.push(extern_cmd);
+        }
+
+        let len = commands.len();
+
+        for (i, mut command) in commands.into_iter().enumerate() {
+            if i > 0 {
+                let prev_child = &mut children[i - 1];
+
+                let Some(stdout) = prev_child.stdout.take() else {
+                    eprintln!("Failed to take stdout of previous command");
+                    break;
+                };
+
+                command.stdin(stdout);
+            }
+
+            let is_last = i + 1 == len;
+            if !is_last {
+                command.stdout(Stdio::piped());
+            }
+
+            let Ok(child) = command.spawn() else {
+                eprintln!(
+                    "Failed to spawn command: {}",
+                    command.get_program().to_string_lossy()
+                );
+                break;
+            };
+
+            children.push(child);
+        }
+
+        for child in &mut children {
+            match child.wait() {
+                Ok(_) => (),
+                Err(e) => eprintln!("Failed to wait for command: {e}"),
+            }
+        }
     }
 }
 
