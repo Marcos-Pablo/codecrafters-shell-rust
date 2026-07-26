@@ -4,6 +4,8 @@ use std::io::Write;
 use crate::command::{Redirect, ShellCommand};
 use crate::open_file_redirects;
 
+pub const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "complete", "jobs", "cd"];
+
 pub struct Output {
     pub stdout: Box<dyn Write>,
     pub _stderr: Box<dyn Write>,
@@ -65,13 +67,6 @@ pub fn open_builtin_redirects(
     Ok((stdout, stderr))
 }
 
-pub fn get_builtins() -> &'static [&'static str] {
-    &["echo", "exit", "type", "pwd", "complete", "jobs"]
-}
-
-fn is_built_in(command: &str) -> bool {
-    matches!(
-        command,
-        "echo" | "exit" | "type" | "pwd" | "complete" | "jobs"
-    )
+pub fn is_built_in(cmd_name: &str) -> bool {
+    BUILTINS.contains(&cmd_name)
 }

@@ -7,7 +7,7 @@ use rustyline::Editor;
 use rustyline::config::CompletionType;
 use rustyline::history::FileHistory;
 
-use crate::builtin::{Output, echo_cmd, type_cmd};
+use crate::builtin::{BUILTINS, Output, echo_cmd, is_built_in, type_cmd};
 use crate::command::{Redirect, ShellCommand};
 use crate::completer::ShellHelper;
 use crate::external::{build_command, command_path, execute_ext_command_foreground};
@@ -40,8 +40,7 @@ impl Shell {
             Err(e) => panic!("Error creating editor: {e}"),
         };
 
-        let builtins = builtin::get_builtins();
-        let helper = ShellHelper::new(builtins);
+        let helper = ShellHelper::new(BUILTINS);
         editor.set_helper(Some(helper));
 
         Shell {
@@ -77,43 +76,54 @@ impl Shell {
                 0 => eprintln!("Couldn't parse the input to a valid pipeline of commands"),
                 1 => {
                     let command = &pipeline.commands[0];
-                    match command.name.as_str() {
-                        "exit" => std::process::exit(0),
-                        "cd" => self.cd_cmd(&command),
-                        "echo" | "type" | "pwd" | "complete" | "jobs" => {
-                            let (stdout, stderr) = match builtin::open_builtin_redirects(&command) {
-                                Ok(pair) => pair,
-                                Err(err) => {
-                                    eprintln!("{err}");
-                                    continue;
-                                }
-                            };
-                            let mut output = Output::new(stdout, stderr);
-
-                            match command.name.as_str() {
-                                "echo" => echo_cmd(&command, &mut output),
-                                "type" => type_cmd(&command, &mut output),
-                                "pwd" => self.pwd_cmd(&mut output),
-                                "complete" => self.complete_cmd(&mut output, &command),
-                                "jobs" => self.jobs.list(&mut output),
-                                _ => unreachable!(),
-                            }
-                        }
-                        cmd_name if let Some(exec_path) = command_path(cmd_name) => {
-                            match pipeline.exec_mode {
-                                ExecutionMode::Foreground => {
-                                    execute_ext_command_foreground(exec_path, &command);
-                                }
-                                ExecutionMode::Background => {
-                                    self.execute_ext_command_background(exec_path, &command);
-                                }
-                            }
-                        }
-                        _ => println!("{}: command not found", command.name),
+                    if is_built_in(&command.name.as_str()) {
+                        self.run_built_in(command);
+                        continue;
                     }
+
+                    if let Some(exec_path) = command_path(&command.name.as_str()) {
+                        match pipeline.exec_mode {
+                            ExecutionMode::Foreground => {
+                                execute_ext_command_foreground(exec_path, &command);
+                            }
+                            ExecutionMode::Background => {
+                                self.execute_ext_command_background(exec_path, &command);
+                            }
+                        }
+                        continue;
+                    }
+
+                    println!("{}: command not found", command.name)
                 }
                 _ => self.exec_pipeline(pipeline),
             }
+        }
+    }
+
+    fn run_built_in(&mut self, command: &ShellCommand) {
+        match command.name.as_str() {
+            "exit" => std::process::exit(0),
+            "cd" => self.cd_cmd(&command),
+            "echo" | "type" | "pwd" | "complete" | "jobs" => {
+                let (stdout, stderr) = match builtin::open_builtin_redirects(&command) {
+                    Ok(pair) => pair,
+                    Err(err) => {
+                        eprintln!("{err}");
+                        return;
+                    }
+                };
+
+                let mut output = Output::new(stdout, stderr);
+                match command.name.as_str() {
+                    "echo" => echo_cmd(&command, &mut output),
+                    "type" => type_cmd(&command, &mut output),
+                    "pwd" => self.pwd_cmd(&mut output),
+                    "complete" => self.complete_cmd(&mut output, &command),
+                    "jobs" => self.jobs.list(&mut output),
+                    _ => unreachable!(),
+                }
+            }
+            _ => println!("{}: command not found", command.name),
         }
     }
 
