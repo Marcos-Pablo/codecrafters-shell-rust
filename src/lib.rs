@@ -59,6 +59,7 @@ impl Shell {
         loop {
             self.jobs.reap();
             let input = self.editor.readline("$ ").expect("Error reading input");
+            let _ = self.editor.add_history_entry(input.as_str());
 
             let Ok((remaining, tokens)) = parser::tokenize(&input.trim()) else {
                 continue;
@@ -126,6 +127,7 @@ impl Shell {
                 "jobs" => self.jobs.list(output),
                 _ => unreachable!(),
             },
+            "history" => self.list_history(output),
             _ => println!("{}: command not found", command.name),
         }
     }
@@ -331,6 +333,13 @@ impl Shell {
                 Ok(_) => (),
                 Err(e) => eprintln!("Failed to wait for command: {e}"),
             }
+        }
+    }
+
+    fn list_history(&mut self, output: &mut Output) {
+        let history = self.editor.history();
+        for (idx, entry) in history.iter().enumerate() {
+            writeln!(output.stdout, "{}  {entry}", idx + 1).expect("Error writing to stdout");
         }
     }
 }
