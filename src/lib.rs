@@ -349,6 +349,14 @@ impl Shell {
                 };
                 self.load_history(path)
             }
+            Some("-w") => {
+                let Some(path) = command.args.get(1).map(|s| s.as_str()) else {
+                    writeln!(output.stdout, "usage: history -w <file>")
+                        .expect("Error writing to stdout");
+                    return;
+                };
+                self.write_history(path);
+            }
             _ => self.list_history(command, output),
         }
     }
@@ -379,6 +387,19 @@ impl Shell {
                 );
             }
         });
+    }
+
+    fn write_history(&mut self, path: &str) {
+        let history = self
+            .editor
+            .history()
+            .iter()
+            .map(|entry| entry.to_string() + "\n")
+            .collect::<String>();
+
+        if let Err(err) = fs::write(path, history) {
+            eprintln!("Error writing history to file: {err}");
+        }
     }
 }
 
