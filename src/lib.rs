@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::{fs, io};
+use std::{env, fs, io};
 
 use rustyline::Editor;
 use rustyline::config::CompletionType;
@@ -35,6 +35,8 @@ pub struct Shell {
     history_baseline: usize,
 }
 
+const HISTFILE_ENV_VAR: &str = "HISTFILE";
+
 impl Shell {
     pub fn new(curr_dir: PathBuf) -> Shell {
         let config = rustyline::Config::builder()
@@ -51,12 +53,18 @@ impl Shell {
         let helper = ShellHelper::new(BUILTINS);
         editor.set_helper(Some(helper));
 
-        Shell {
+        let mut shell = Shell {
             curr_dir,
             jobs: Jobs::new(),
             editor,
             history_baseline: 0,
-        }
+        };
+
+        env::var(HISTFILE_ENV_VAR)
+            .ok()
+            .map(|path| shell.load_history(&path));
+
+        shell
     }
 
     pub fn run(mut self) {
