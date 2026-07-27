@@ -32,6 +32,7 @@ pub struct Shell {
     curr_dir: PathBuf,
     jobs: Jobs,
     editor: Editor<ShellHelper, FileHistory>,
+    history_baseline: usize,
 }
 
 impl Shell {
@@ -54,6 +55,7 @@ impl Shell {
             curr_dir,
             jobs: Jobs::new(),
             editor,
+            history_baseline: 0,
         }
     }
 
@@ -357,6 +359,14 @@ impl Shell {
                 };
                 self.write_history(path);
             }
+            Some("-a") => {
+                let Some(path) = command.args.get(1).map(|s| s.as_str()) else {
+                    writeln!(output.stdout, "usage: history -w <file>")
+                        .expect("Error writing to stdout");
+                    return;
+                };
+                self.append_history(path);
+            }
             _ => self.list_history(command, output),
         }
     }
@@ -386,6 +396,7 @@ impl Shell {
                     history_path.display()
                 );
             }
+            self.history_baseline += self.editor.history().len() - self.history_baseline;
         });
     }
 
@@ -400,6 +411,28 @@ impl Shell {
         if let Err(err) = fs::write(path, history) {
             eprintln!("Error writing history to file: {err}");
         }
+        self.history_baseline += self.editor.history().len() - self.history_baseline;
+    }
+
+    fn append_history(&mut self, path: &str) {
+        let history = self
+            .editor
+            .history()
+            .iter()
+            .skip(self.history_baseline)
+            .map(|entry| entry.to_string() + "\n")
+            .collect::<String>();
+
+        if let Err(err) = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .and_then(|mut file| file.write_all(history.as_bytes()))
+        {
+            eprintln!("Error appending history to file: {err}");
+        }
+
+        self.history_baseline += self.editor.history().len() - self.history_baseline;
     }
 }
 
