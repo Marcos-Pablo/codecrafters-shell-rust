@@ -129,7 +129,7 @@ impl Shell {
                 "jobs" => self.jobs.list(output),
                 _ => unreachable!(),
             },
-            "history" => self.list_history(&command, output),
+            "history" => self.history_cmd(&command, output),
             _ => println!("{}: command not found", command.name),
         }
     }
@@ -338,8 +338,24 @@ impl Shell {
         }
     }
 
+    fn history_cmd(&mut self, command: &ShellCommand, output: &mut Output) {
+        let first_arg = command.args.get(0);
+        match first_arg.map(|s| s.as_str()) {
+            Some("-r") => {
+                let Some(path) = command.args.get(1).map(|s| s.as_str()) else {
+                    writeln!(output.stdout, "usage: history -r <file>")
+                        .expect("Error writing to stdout");
+                    return;
+                };
+                self.load_history(path)
+            }
+            _ => self.list_history(command, output),
+        }
+    }
+
     fn list_history(&mut self, command: &ShellCommand, output: &mut Output) {
         let history = self.editor.history();
+
         let max_entries = command
             .args
             .get(0)
@@ -351,6 +367,18 @@ impl Shell {
             let idx = idx + skip + 1;
             writeln!(output.stdout, "{:>5}  {entry}", idx).expect("Error writing to stdout");
         }
+    }
+
+    fn load_history(&mut self, path: &str) {
+        let history_path = PathBuf::from(path);
+        history_path.exists().then(|| {
+            if let Err(e) = self.editor.load_history(&history_path) {
+                eprintln!(
+                    "Failed to load history from {}: {e}",
+                    history_path.display()
+                );
+            }
+        });
     }
 }
 
