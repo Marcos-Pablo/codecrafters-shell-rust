@@ -5,7 +5,7 @@ use std::{fs, io};
 
 use rustyline::Editor;
 use rustyline::config::CompletionType;
-use rustyline::history::FileHistory;
+use rustyline::history::{FileHistory, History};
 
 use crate::builtin::{BUILTINS, Output, echo_cmd, is_built_in, is_pipeline_built_in, type_cmd};
 use crate::command::{Redirect, ShellCommand};
@@ -38,6 +38,8 @@ impl Shell {
     pub fn new(curr_dir: PathBuf) -> Shell {
         let config = rustyline::Config::builder()
             .completion_type(CompletionType::List)
+            .history_ignore_dups(false)
+            .expect("Error creating rustyline config")
             .build();
 
         let mut editor = match Editor::with_config(config) {
@@ -127,7 +129,7 @@ impl Shell {
                 "jobs" => self.jobs.list(output),
                 _ => unreachable!(),
             },
-            "history" => self.list_history(output),
+            "history" => self.list_history(&command, output),
             _ => println!("{}: command not found", command.name),
         }
     }
@@ -336,10 +338,18 @@ impl Shell {
         }
     }
 
-    fn list_history(&mut self, output: &mut Output) {
+    fn list_history(&mut self, command: &ShellCommand, output: &mut Output) {
         let history = self.editor.history();
-        for (idx, entry) in history.iter().enumerate() {
-            writeln!(output.stdout, "{}  {entry}", idx + 1).expect("Error writing to stdout");
+        let max_entries = command
+            .args
+            .get(0)
+            .and_then(|arg| arg.parse::<usize>().ok())
+            .unwrap_or(history.len());
+
+        let skip = history.len() - max_entries;
+        for (idx, entry) in history.iter().skip(skip).take(max_entries).enumerate() {
+            let idx = idx + skip + 1;
+            writeln!(output.stdout, "{:>5}  {entry}", idx).expect("Error writing to stdout");
         }
     }
 }
