@@ -4,9 +4,11 @@ use std::io::Write;
 use crate::command::{Redirect, ShellCommand};
 use crate::open_file_redirects;
 
-pub const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "complete", "jobs", "cd"];
+pub const BUILTINS: &[&str] = &[
+    "echo", "exit", "type", "pwd", "complete", "jobs", "cd", "history",
+];
 
-pub const PIPELINE_BUILTINS: &[&str] = &["echo", "type", "pwd"];
+pub const PIPELINE_BUILTINS: &[&str] = &["echo", "type", "pwd", "history"];
 
 pub struct Output {
     pub stdout: Box<dyn Write>,
