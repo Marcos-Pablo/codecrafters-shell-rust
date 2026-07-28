@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 use std::{env, fs};
@@ -23,12 +24,14 @@ mod jobs;
 mod parser;
 mod pipeline;
 mod token;
+mod vars;
 
 pub struct Shell {
     curr_dir: PathBuf,
     jobs: Jobs,
     editor: Editor<ShellHelper, FileHistory>,
     history_baseline: usize,
+    vars: HashMap<String, String>,
 }
 
 const HISTFILE_ENV_VAR: &str = "HISTFILE";
@@ -54,6 +57,7 @@ impl Shell {
             jobs: Jobs::new(),
             editor,
             history_baseline: 0,
+            vars: HashMap::new(),
         };
 
         env::var(HISTFILE_ENV_VAR)
@@ -142,6 +146,7 @@ impl Shell {
             "complete" => self.complete_cmd(output, &command),
             "jobs" => self.jobs.list(output),
             "history" => self.history_cmd(&command, output),
+            "declare" => self.declare_cmd(command, output),
             _ => println!("{}: command not found", command.name),
         }
     }
