@@ -2,6 +2,8 @@ mod core;
 mod primitives;
 mod tokenizer;
 
+use std::collections::HashMap;
+
 pub use tokenizer::tokenize;
 
 use crate::{
@@ -10,7 +12,10 @@ use crate::{
     token::{Token, TokenPart},
 };
 
-pub fn parse_pipeline(tokens: &[Token]) -> Result<Pipeline, String> {
+pub fn parse_pipeline(
+    tokens: &[Token],
+    vars: &HashMap<String, String>,
+) -> Result<Pipeline, String> {
     let mut pipeline = Pipeline::new();
     let exec_mode = match tokens.last() {
         Some(token) => match token {
@@ -33,7 +38,7 @@ pub fn parse_pipeline(tokens: &[Token]) -> Result<Pipeline, String> {
     for part in tokens[..tokens.len() - exec_mode_offset]
         .split(|t| matches!(t.parts.as_slice(), [TokenPart::Unquoted(s)] if s == "|"))
     {
-        let command = match parse_command(part) {
+        let command = match parse_command(part, vars) {
             Ok(c) => c,
             Err(err) => return Err(err),
         };
@@ -43,7 +48,10 @@ pub fn parse_pipeline(tokens: &[Token]) -> Result<Pipeline, String> {
     Ok(pipeline)
 }
 
-pub fn parse_command(tokens: &[Token]) -> Result<ShellCommand, String> {
+pub fn parse_command(
+    tokens: &[Token],
+    vars: &HashMap<String, String>,
+) -> Result<ShellCommand, String> {
     let mut cmd_name = String::new();
     let mut args = vec![];
     let mut redirect: Option<Redirect> = None;
@@ -78,7 +86,8 @@ pub fn parse_command(tokens: &[Token]) -> Result<ShellCommand, String> {
             continue;
         }
 
-        args.push(content);
+        let expanded_content = token.expand(vars);
+        args.push(expanded_content);
     }
 
     let command = ShellCommand {

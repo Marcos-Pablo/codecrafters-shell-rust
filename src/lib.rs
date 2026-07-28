@@ -18,6 +18,7 @@ mod builtin;
 mod command;
 mod completer;
 mod executor;
+mod expand;
 mod external;
 mod history;
 mod jobs;
@@ -91,7 +92,7 @@ impl Shell {
                 continue;
             }
 
-            let pipeline = match parser::parse_pipeline(&tokens) {
+            let pipeline = match parser::parse_pipeline(&tokens, &self.vars) {
                 Ok(p) => p,
                 Err(err) => {
                     eprintln!("{err}");

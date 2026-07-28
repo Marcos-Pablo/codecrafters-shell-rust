@@ -53,11 +53,10 @@ impl Shell {
         }
 
         let mut chars = name.chars();
-        let first_char = chars.next();
-        match first_char {
-            Some(c) if c.is_ascii_alphabetic() || c == '_' => true,
-            _ => return false,
-        };
+        let first_char = chars.next().unwrap();
+        if !first_char.is_ascii_alphabetic() && first_char != '_' {
+            return false;
+        }
 
         while let Some(c) = chars.next() {
             if !c.is_ascii_alphanumeric() && c != '_' {
