@@ -5,7 +5,7 @@ use crate::command::{Redirect, ShellCommand};
 use crate::open_file_redirects;
 
 pub const BUILTINS: &[&str] = &[
-    "echo", "exit", "type", "pwd", "complete", "jobs", "cd", "history",
+    "echo", "exit", "type", "pwd", "complete", "jobs", "cd", "history", "declare",
 ];
 
 pub const PIPELINE_BUILTINS: &[&str] = &["echo", "type", "pwd", "history"];
