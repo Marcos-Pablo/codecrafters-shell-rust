@@ -129,7 +129,7 @@ impl Shell {
 
     fn run_built_in(&mut self, command: &ShellCommand, output: &mut Output) {
         match command.name.as_str() {
-            "exit" => std::process::exit(0),
+            "exit" => self.exit_cmd(0),
             "cd" => self.cd_cmd(&command),
             "echo" | "type" | "pwd" | "complete" | "jobs" => match command.name.as_str() {
                 "echo" => echo_cmd(&command, output),
@@ -142,6 +142,14 @@ impl Shell {
             "history" => self.history_cmd(&command, output),
             _ => println!("{}: command not found", command.name),
         }
+    }
+
+    fn exit_cmd(&mut self, code: i32) {
+        env::var(HISTFILE_ENV_VAR)
+            .ok()
+            .map(|path| self.write_history(&path));
+
+        std::process::exit(code);
     }
 
     fn pwd_cmd(&self, output: &mut Output) {
@@ -388,10 +396,11 @@ impl Shell {
             .and_then(|arg| arg.parse::<usize>().ok())
             .unwrap_or(history.len());
 
-        let skip = history.len() - max_entries;
-        for (idx, entry) in history.iter().skip(skip).take(max_entries).enumerate() {
-            let idx = idx + skip + 1;
-            writeln!(output.stdout, "{:>5}  {entry}", idx).expect("Error writing to stdout");
+        let offset = history.len() - max_entries;
+        for (idx, entry) in history.iter().skip(offset).take(max_entries).enumerate() {
+            let display_idx = idx + offset + 1;
+            writeln!(output.stdout, "{:>5}  {entry}", display_idx)
+                .expect("Error writing to stdout");
         }
     }
 
