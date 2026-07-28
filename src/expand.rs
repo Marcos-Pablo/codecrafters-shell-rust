@@ -26,8 +26,6 @@ impl Token {
 
                         if let Some(value) = vars.get(var_name) {
                             result.push_str(value);
-                        } else {
-                            result.push_str(part);
                         }
 
                         if end_index < part.len() {

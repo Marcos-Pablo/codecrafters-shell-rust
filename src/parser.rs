@@ -87,7 +87,9 @@ pub fn parse_command(
         }
 
         let expanded_content = token.expand(vars);
-        args.push(expanded_content);
+        if !expanded_content.is_empty() {
+            args.push(expanded_content);
+        }
     }
 
     let command = ShellCommand {
