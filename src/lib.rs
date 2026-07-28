@@ -70,7 +70,16 @@ impl Shell {
     pub fn run(mut self) {
         loop {
             self.jobs.reap();
-            let input = self.editor.readline("$ ").expect("Error reading input");
+            let input = match self.editor.readline("$ ") {
+                Ok(line) => line,
+                Err(rustyline::error::ReadlineError::Eof) => break,
+                Err(rustyline::error::ReadlineError::Interrupted) => continue,
+                Err(err) => {
+                    eprintln!("Error reading input: {err}");
+                    break;
+                }
+            };
+
             let _ = self.editor.add_history_entry(input.as_str());
 
             let Ok((remaining, tokens)) = parser::tokenize(&input.trim()) else {
@@ -131,14 +140,11 @@ impl Shell {
         match command.name.as_str() {
             "exit" => self.exit_cmd(0),
             "cd" => self.cd_cmd(&command),
-            "echo" | "type" | "pwd" | "complete" | "jobs" => match command.name.as_str() {
-                "echo" => echo_cmd(&command, output),
-                "type" => type_cmd(&command, output),
-                "pwd" => self.pwd_cmd(output),
-                "complete" => self.complete_cmd(output, &command),
-                "jobs" => self.jobs.list(output),
-                _ => unreachable!(),
-            },
+            "echo" => echo_cmd(&command, output),
+            "type" => type_cmd(&command, output),
+            "pwd" => self.pwd_cmd(output),
+            "complete" => self.complete_cmd(output, &command),
+            "jobs" => self.jobs.list(output),
             "history" => self.history_cmd(&command, output),
             _ => println!("{}: command not found", command.name),
         }
@@ -390,14 +396,15 @@ impl Shell {
     fn list_history(&mut self, command: &ShellCommand, output: &mut Output) {
         let history = self.editor.history();
 
-        let max_entries = command
+        let num_entries = command
             .args
             .get(0)
             .and_then(|arg| arg.parse::<usize>().ok())
             .unwrap_or(history.len());
 
-        let offset = history.len() - max_entries;
-        for (idx, entry) in history.iter().skip(offset).take(max_entries).enumerate() {
+        let offset = history.len() - num_entries;
+
+        for (idx, entry) in history.iter().skip(offset).take(num_entries).enumerate() {
             let display_idx = idx + offset + 1;
             writeln!(output.stdout, "{:>5}  {entry}", display_idx)
                 .expect("Error writing to stdout");
