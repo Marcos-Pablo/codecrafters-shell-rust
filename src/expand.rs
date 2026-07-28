@@ -15,11 +15,23 @@ impl Token {
                     };
 
                     result.push_str(prefix);
-                    for var_name in remaining.split("$") {
+                    for part in remaining.split("$") {
+                        let mut var_name = part;
+                        let mut end_index = part.len();
+                        if part.starts_with("{") {
+                            end_index = part.find('}').unwrap_or(part.len());
+                            var_name = &part[1..end_index];
+                            end_index += 1;
+                        }
+
                         if let Some(value) = vars.get(var_name) {
                             result.push_str(value);
                         } else {
-                            result.push_str(var_name);
+                            result.push_str(part);
+                        }
+
+                        if end_index < part.len() {
+                            result.push_str(&part[end_index..]);
                         }
                     }
                 }
