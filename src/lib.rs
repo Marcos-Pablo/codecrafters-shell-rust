@@ -1,33 +1,28 @@
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
-use std::{env, fs, io};
+use std::{env, fs};
 
 use rustyline::Editor;
 use rustyline::config::CompletionType;
 use rustyline::history::FileHistory;
 
-use crate::builtin::{BUILTINS, Output, echo_cmd, is_built_in, is_pipeline_built_in, type_cmd};
+use crate::builtin::{BUILTINS, Output, echo_cmd, is_built_in, type_cmd};
 use crate::command::{Redirect, ShellCommand};
 use crate::completer::ShellHelper;
-use crate::external::{build_command, command_path, execute_ext_command_foreground};
+use crate::external::{command_path, execute_ext_command_foreground};
 use crate::jobs::Jobs;
-use crate::pipeline::{ExecutionMode, Pipeline};
+use crate::pipeline::ExecutionMode;
 
 mod builtin;
 mod command;
 mod completer;
+mod executor;
 mod external;
 mod history;
 mod jobs;
 mod parser;
 mod pipeline;
 mod token;
-
-enum Stage {
-    Builtin(ShellCommand),
-    External(Command),
-}
 
 pub struct Shell {
     curr_dir: PathBuf,
@@ -259,108 +254,6 @@ impl Shell {
 
         let helper = self.editor.helper_mut().expect("ShellHelper not set");
         helper.remove_ext_completion(target);
-    }
-
-    fn execute_ext_command_background(&mut self, exec_path: PathBuf, command: &ShellCommand) {
-        let mut extern_cmd = build_command(exec_path, command);
-        match extern_cmd.spawn() {
-            Ok(child) => {
-                let cmt_str = command.to_string();
-                let pid = child.id();
-                let id = self.jobs.add(child, cmt_str);
-                println!("[{id}] {pid}");
-            }
-            Err(e) => eprintln!("Failed to spawn background task: {e}"),
-        };
-    }
-
-    fn exec_pipeline(&mut self, pipeline: Pipeline) {
-        let mut commands: Vec<Stage> = vec![];
-        let mut children: Vec<Child> = vec![];
-
-        for shell_command in pipeline.commands {
-            if is_pipeline_built_in(shell_command.name.as_str()) {
-                commands.push(Stage::Builtin(shell_command));
-                continue;
-            }
-
-            let Some(exec_path) = command_path(&shell_command.name) else {
-                eprintln!("{}: command not found", shell_command.name);
-                return;
-            };
-
-            let extern_cmd = build_command(exec_path, &shell_command);
-            commands.push(Stage::External(extern_cmd));
-        }
-
-        let len = commands.len();
-        let mut prev_reader: Option<io::PipeReader> = None;
-
-        for (i, stage) in commands.into_iter().enumerate() {
-            let is_last = i + 1 == len;
-
-            let pipe = if is_last {
-                None
-            } else {
-                match io::pipe() {
-                    Ok(pipe) => Some(pipe),
-                    Err(e) => {
-                        eprintln!("Failed to create pipe: {e}");
-                        break;
-                    }
-                }
-            };
-
-            match stage {
-                Stage::External(mut cmd) => {
-                    if let Some(reader) = prev_reader.take() {
-                        cmd.stdin(Stdio::from(reader));
-                    }
-
-                    if let Some((reader, writer)) = pipe {
-                        cmd.stdout(Stdio::from(writer));
-                        prev_reader = Some(reader);
-                    }
-
-                    let Ok(child) = cmd.spawn() else {
-                        eprintln!(
-                            "Failed to spawn command: {}",
-                            cmd.get_program().to_string_lossy()
-                        );
-                        break;
-                    };
-                    children.push(child);
-                }
-                Stage::Builtin(cmd) => {
-                    drop(prev_reader.take());
-                    match pipe {
-                        Some((reader, writer)) => {
-                            {
-                                let stdout: Box<dyn Write> = Box::new(writer);
-                                let stderr: Box<dyn Write> = Box::new(io::stderr());
-                                let mut output = Output::new(stdout, stderr);
-                                self.run_built_in(&cmd, &mut output);
-                            }
-
-                            prev_reader = Some(reader);
-                        }
-                        None => {
-                            let stdout: Box<dyn Write> = Box::new(io::stdout());
-                            let stderr: Box<dyn Write> = Box::new(io::stderr());
-                            let mut output = Output::new(stdout, stderr);
-                            self.run_built_in(&cmd, &mut output);
-                        }
-                    }
-                }
-            }
-        }
-
-        for child in &mut children {
-            match child.wait() {
-                Ok(_) => (),
-                Err(e) => eprintln!("Failed to wait for command: {e}"),
-            }
-        }
     }
 }
 
