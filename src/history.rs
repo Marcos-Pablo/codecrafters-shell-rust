@@ -81,6 +81,10 @@ impl Shell {
         self.history_baseline += self.editor.history().len() - self.history_baseline;
     }
 
+    // Appends only entries at or past `history_baseline` (everything before it
+    // is already persisted by definition). The baseline advances after every
+    // -a, -w, and -r: without that, a later -a would duplicate entries that a
+    // previous -a wrote, or that -r loaded from a file.
     fn append_history(&mut self, path: &str) {
         let history = self
             .editor

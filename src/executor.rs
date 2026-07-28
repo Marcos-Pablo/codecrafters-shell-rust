@@ -35,6 +35,9 @@ impl Shell {
         };
     }
 
+    // DEVIATION: `pipeline.exec_mode` is ignored — a backgrounded pipeline
+    // (`cmd1 | cmd2 &`) runs in the foreground. Bash backgrounds the whole
+    // pipeline as one job; not exercised by the stages.
     pub(crate) fn exec_pipeline(&mut self, pipeline: Pipeline) {
         let mut commands: Vec<Stage> = vec![];
         let mut children: Vec<Child> = vec![];
@@ -45,6 +48,8 @@ impl Shell {
                 continue;
             }
 
+            // DEVIATION: a command-not-found aborts the entire pipeline
+            // before anything spawns. Bash still runs the other stages.
             let Some(exec_path) = command_path(&shell_command.name) else {
                 eprintln!("{}: command not found", shell_command.name);
                 return;
@@ -79,6 +84,9 @@ impl Shell {
                     }
 
                     if let Some((reader, writer)) = pipe {
+                        // DEVIATION: the pipe overrides a `>` redirect from
+                        // build_command; bash applies the redirect on top of
+                        // the pipe instead. Untested by the stages.
                         cmd.stdout(Stdio::from(writer));
                         prev_reader = Some(reader);
                     }
@@ -93,6 +101,12 @@ impl Shell {
                     children.push(child);
                 }
                 Stage::Builtin(cmd) => {
+                    // Builtins are sources, never sinks: none of them reads
+                    // stdin, so the upstream read end is closed on purpose.
+                    // Without this, an upstream producing >64KB would block
+                    // forever; with it, the writer gets EPIPE and terminates.
+                    // Also: a builtin stage's own redirect is ignored — its
+                    // Output comes from the pipe wiring, never from files.
                     drop(prev_reader.take());
                     match pipe {
                         Some((reader, writer)) => {

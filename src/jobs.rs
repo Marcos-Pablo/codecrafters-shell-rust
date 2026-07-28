@@ -1,5 +1,9 @@
 use crate::builtin::Output;
 
+/// Invariant: no `Done` job survives between public calls — every method that
+/// marks jobs Done (`list`, `reap`) also removes them before returning. This
+/// is what lets `reap` announce every Done job it finds as freshly exited,
+/// with no "already announced" bookkeeping.
 pub struct Jobs {
     jobs: Vec<Job>,
 }

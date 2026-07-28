@@ -32,6 +32,12 @@ fn token<'a>() -> impl Parser<'a, Token> {
     )
 }
 
+// NOTE: operators (`|`, `>`, `&`) are ordinary unquoted characters to this
+// tokenizer; the parser only recognizes them as whitespace-delimited tokens.
+// Glued forms (`ls|wc`, `sleep 5&`, `echo hi>f`) are NOT split (bash would),
+// and a mid-line `&` becomes an argument, not a command separator.
+// Not exercised by the challenge stages; the proper fix is lexing operators
+// as their own tokens (longest-match for `>>`, fd-prefixes like `2>`).
 fn unquoted_token_part<'a>() -> impl Parser<'a, TokenPart> {
     move |input| {
         let parser =
