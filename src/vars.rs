@@ -12,6 +12,17 @@ impl Shell {
                         .expect("Error writing to stdout"),
                 };
             }
+            Some(key_val_pair) => {
+                let parts: Vec<&str> = key_val_pair.splitn(2, '=').collect();
+                if parts.len() == 2 {
+                    let name = parts[0];
+                    let value = parts[1];
+                    self.vars.insert(name.to_string(), value.to_string());
+                } else {
+                    writeln!(output.stdout, "Usage: declare [-p] [name]")
+                        .expect("Error writing to stdout");
+                }
+            }
             _ => writeln!(output.stdout, "Usage: declare [-p] [name]")
                 .expect("Error writing to stdout"),
         };
@@ -20,9 +31,8 @@ impl Shell {
     fn display_var(&self, name: &str, output: &mut Output) {
         let value = self.vars.get(name);
         match value {
-            Some(value) => {
-                writeln!(output.stdout, "{name}={value}").expect("Error writing to stdout")
-            }
+            Some(value) => writeln!(output.stdout, "declare -- {name}=\"{value}\"")
+                .expect("Error writing to stdout"),
             None => writeln!(output.stdout, "declare: {name}: not found")
                 .expect("Error writing to stdout"),
         };
